@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de SSCC – html5‑qrcode</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.4;
+        }
+        h1 {
+            text-align: center;
+        }
+        .header-inputs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        .header-inputs label {
+            display: flex;
+            flex-direction: column;
+            font-weight: bold;
+        }
+        .header-inputs input {
+            padding: 6px;
+            font-size: 1em;
+        }
+        button {
+            padding: 8px 12px;
+            font-size: 1em;
+            margin-right: 10px;
+        }
+        #scanner-container {
+            width: 100%;
+            max-width: 600px;
+            margin: 20px auto;
+            border: 2px dashed #ddd;
+            min-height: 320px;
+            position: relative;
+        }
+        #table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tbody tr:nth-child(odd) {
+            background-color: #fafafa;
+        }
+    </style>
+</head>
+<body>
+    <h1>Registro de códigos SSCC – html5‑qrcode</h1>
+    <div class="header-inputs">
+        <label>
+            Tienda
+            <input type="text" id="tienda" placeholder="Código o nombre de la tienda">
+        </label>
+        <label>
+            Matrícula
+            <input type="text" id="matricula" placeholder="Matrícula del vehículo">
+        </label>
+        <label>
+            Circuito
+            <input type="text" id="circuito" placeholder="Circuito o ruta">
+        </label>
+        <label>
+            Precinto
+            <input type="text" id="precinto" placeholder="Número de precinto">
+        </label>
+        <label>
+            SSCC manual
+            <input type="text" id="sscc-manual" placeholder="Introduce SSCC manualmente">
+        </label>
+        <label>
+            Correo electrónico
+            <input type="email" id="correo" placeholder="correo@ejemplo.com">
+        </label>
+    </div>
+    <!-- Botones de control -->
+    <!-- Botón de inicio de escaneo eliminado para desactivar la captura con cámara -->
+    <button id="start-btn" style="display:none;">Iniciar escaneo</button>
+    <!-- Botón de cancelación de escaneo eliminado -->
+    <button id="stop-btn" style="display:none;" disabled>Cancelar escaneo</button>
+    <button id="export-btn" disabled>Fin de captura (exportar)</button>
+    <button id="save-btn" disabled>Guardar registros</button>
+    <button id="view-btn">Ver registros</button>
+    <button id="add-manual-btn">Añadir SSCC manual</button>
+    <!-- Contenedor del escáner eliminado; ya no se muestra la vista de la cámara -->
+    <!-- Tabla de resultados -->
+    <table id="table">
+        <thead>
+            <tr>
+                <th>Tienda</th>
+                <th>Matrícula</th>
+                <th>Circuito</th>
+                <th>Precinto</th>
+                <!-- Columna para la fecha de generación de cada registro -->
+                <th>Fecha</th>
+                <th>SSCC escaneado</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <!-- Librería html5-qrcode eliminada: se ha desactivado el escaneo por cámara -->
+    <!-- Librería SheetJS para exportar los registros -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <!-- Librería SMTPJS -->
+    <script src="https://smtpjs.com/v3/smtp.js"></script>
+    <script>
+        // Se han eliminado las variables de escaneo, ya que no se usará la cámara
+        let tiendaVal, matriculaVal, circuitoVal, precintoVal;
+        const SMTP_CONFIG = {
+            SecureToken: 'YOUR_SECURE_TOKEN',
+            From: 'FROM_ADDRESS'
+        };
+        // Iniciar escaneo (inhabilitado): se muestra un mensaje porque se ha eliminado la función de cámara
+        function startScanner() {
+            alert('La captura con cámara no está disponible en esta versión. Usa el campo "SSCC manual" para ingresar los códigos.');
+        }
+        // Funciones de escaneo anuladas: no se realiza ninguna acción
+        function onScanSuccess() {}
+        function onScanFailure() {}
+        function stopScanner() {}
+        // Añadir fila a la tabla, incluyendo la fecha de generación
+        function addRow(tienda, matricula, circuito, precinto, sscc, fecha) {
+            const tbody = document.querySelector('#table tbody');
+            const row = document.createElement('tr');
+            // Si no se proporciona una fecha, generar la actual en formato local
+            const fechaRegistro = fecha || new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'medium' });
+            row.innerHTML = `
+                <td>${tienda}</td>
+                <td>${matricula}</td>
+                <td>${circuito}</td>
+                <td>${precinto}</td>
+                <td>${fechaRegistro}</td>
+                <td>${sscc}</td>
+                <td><button type="button" class="delete-row">Eliminar</button></td>
+            `;
+            row.querySelector('.delete-row').addEventListener('click', () => {
+                row.remove();
+                const body = document.querySelector('#table tbody');
+                if (body.children.length === 0) {
+                    document.getElementById('export-btn').disabled = true;
+                    document.getElementById('save-btn').disabled = true;
+                }
+            });
+            tbody.appendChild(row);
+            // Habilitar botones de exportación y guardado cuando hay registros
+            document.getElementById('export-btn').disabled = false;
+            document.getElementById('save-btn').disabled = false;
+        }
+        // Añadir SSCC manual
+        function addManual() {
+            const manualField = document.getElementById('sscc-manual');
+            const manualCode = manualField.value.trim();
+            const tienda = tiendaVal || document.getElementById('tienda').value.trim();
+            const matricula = matriculaVal || document.getElementById('matricula').value.trim();
+            const circuito = circuitoVal || document.getElementById('circuito').value.trim();
+            const precinto = precintoVal || document.getElementById('precinto').value.trim();
+            if (!tienda || !matricula || !circuito || !precinto) {
+                alert('Por favor, rellena los campos de cabecera (Tienda, Matrícula, Circuito y Precinto) antes de añadir un SSCC manual.');
+                return;
+            }
+            if (!manualCode) {
+                alert('Introduce el código SSCC que deseas añadir manualmente.');
+                return;
+            }
+            // Para registros manuales, incluir la fecha de creación
+            const fechaManual = new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'medium' });
+            addRow(tienda, matricula, circuito, precinto, manualCode, fechaManual);
+            document.getElementById('export-btn').disabled = false;
+            document.getElementById('save-btn').disabled = false;
+            manualField.value = '';
+        }
+        // Exportar tabla y enviar correo
+        function exportTable() {
+            // Detener escaneo en caso de que hubiera quedado activo (no hace nada si está desactivado)
+            stopScanner();
+            const tableElem = document.getElementById('table');
+            const workbook = XLSX.utils.table_to_book(tableElem, { sheet: 'Expedición' });
+            const fileName = 'registro_de_expedicion_LLS_Palma.xlsx';
+            XLSX.writeFile(workbook, fileName);
+            const correo = document.getElementById('correo').value.trim();
+            if (correo) {
+                const tokenConfigured = SMTP_CONFIG.SecureToken && SMTP_CONFIG.SecureToken !== 'YOUR_SECURE_TOKEN';
+                const fromConfigured = SMTP_CONFIG.From && SMTP_CONFIG.From !== 'FROM_ADDRESS';
+                if (tokenConfigured && fromConfigured) {
+                    if (confirm(`¿Deseas enviar el fichero Excel automáticamente a ${correo}?`)) {
+                        const base64 = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+                        const dataUri = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + base64;
+                        Email.send({
+                            SecureToken: SMTP_CONFIG.SecureToken,
+                            To: correo,
+                            From: SMTP_CONFIG.From,
+                            Subject: 'Registro de expedición LLS Palma',
+                            Body: 'Se adjunta el archivo Excel con los registros de expedición.',
+                            Attachments: [ { name: fileName, data: dataUri } ]
+                        }).then(message => {
+                            alert('Correo enviado: ' + message);
+                        }).catch(error => {
+                            alert('No se pudo enviar el correo automáticamente: ' + error + '\nSe abrirá el cliente de correo predeterminado.');
+                            abrirMailto(correo);
+                        });
+                    } else {
+                        abrirMailto(correo);
+                    }
+                } else {
+                    abrirMailto(correo);
+                }
+            }
+        }
+
+        // Guardar registros de la tabla en localStorage
+        function saveRecords() {
+            const tbody = document.querySelector('#table tbody');
+            const rows = tbody.querySelectorAll('tr');
+            const records = [];
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                // Esperamos al menos 6 celdas: tienda, matrícula, circuito, precinto, fecha y sscc
+                if (cells.length >= 6) {
+                    records.push({
+                        tienda: cells[0].textContent,
+                        matricula: cells[1].textContent,
+                        circuito: cells[2].textContent,
+                        precinto: cells[3].textContent,
+                        fecha: cells[4].textContent,
+                        sscc: cells[5].textContent
+                    });
+                }
+            });
+            localStorage.setItem('ssccRegistros', JSON.stringify(records));
+            alert('Registros guardados localmente');
+            // Limpiar la tabla y el formulario tras guardar
+            clearAll();
+        }
+
+        // Limpiar la tabla y los campos del formulario
+        function clearAll() {
+            // Detener escaneo si estuviera activo (la función es un stub cuando no hay cámara)
+            stopScanner();
+            // Vaciar la tabla
+            const tbody = document.querySelector('#table tbody');
+            while (tbody.firstChild) {
+                tbody.removeChild(tbody.firstChild);
+            }
+            // Desactivar botones de exportación y guardado
+            document.getElementById('export-btn').disabled = true;
+            document.getElementById('save-btn').disabled = true;
+            // Reiniciar valores almacenados de cabecera
+            tiendaVal = matriculaVal = circuitoVal = precintoVal = null;
+            // Vaciar campos de entrada
+            document.getElementById('tienda').value = '';
+            document.getElementById('matricula').value = '';
+            document.getElementById('circuito').value = '';
+            document.getElementById('precinto').value = '';
+            document.getElementById('sscc-manual').value = '';
+            document.getElementById('correo').value = '';
+        }
+
+        // Cargar registros de localStorage al iniciar
+        function loadRecords() {
+            const data = localStorage.getItem('ssccRegistros');
+            if (!data) return;
+            try {
+                const records = JSON.parse(data);
+                if (Array.isArray(records)) {
+                    records.forEach(rec => {
+                        // Pasar también la fecha guardada (si existe)
+                        addRow(rec.tienda, rec.matricula, rec.circuito, rec.precinto, rec.sscc, rec.fecha);
+                    });
+                }
+            } catch (err) {
+                console.error('Error al cargar registros:', err);
+            }
+        }
+        // Abrir cliente de correo
+        function abrirMailto(correo) {
+            const subject = encodeURIComponent('Registro de expedición LLS Palma');
+            const body = encodeURIComponent('Adjunto el archivo Excel con los registros de expedición. Por favor, revisa el archivo y confírmame la recepción.');
+            const link = `mailto:${correo}?subject=${subject}&body=${body}`;
+            setTimeout(() => {
+                window.location.href = link;
+            }, 500);
+        }
+        document.getElementById('start-btn').addEventListener('click', startScanner);
+        document.getElementById('stop-btn').addEventListener('click', stopScanner);
+        document.getElementById('export-btn').addEventListener('click', exportTable);
+        document.getElementById('add-manual-btn').addEventListener('click', addManual);
+        document.getElementById('save-btn').addEventListener('click', saveRecords);
+        document.getElementById('view-btn').addEventListener('click', () => {
+            // Abrir una nueva pestaña con la vista de registros
+            window.open('ver_registros.html', '_blank');
+        });
+
+        // Cargar registros existentes al cargar la página
+        window.addEventListener('DOMContentLoaded', loadRecords);
+    </script>
+</body>
+</html>
