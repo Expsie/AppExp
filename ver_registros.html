@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registros SSCC guardados</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tbody tr:nth-child(odd) {
+            background-color: #fafafa;
+        }
+    </style>
+</head>
+<body>
+    <h1>Registros de SSCC guardados</h1>
+    <!-- Mostrar la fecha y hora de generación de la página -->
+    <p>Fecha de generación: <span id="fecha"></span></p>
+    <!-- Botón para exportar los registros a un archivo Excel -->
+    <button id="export-registros-btn" disabled>Exportar a Excel</button>
+    <div id="content">
+        <p>Cargando registros...</p>
+    </div>
+    <!-- Librería SheetJS para exportar -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <script>
+        function renderTable(records) {
+            if (!records || records.length === 0) {
+                document.getElementById('content').innerHTML = '<p>No hay registros guardados.</p>';
+                document.getElementById('export-registros-btn').disabled = true;
+                return;
+            }
+            // Construir tabla con una columna adicional para la fecha de generación
+            let html = '<table id="tabla-registros"><thead><tr><th>Tienda</th><th>Matrícula</th><th>Circuito</th><th>Precinto</th><th>Fecha</th><th>SSCC</th></tr></thead><tbody>';
+            records.forEach(rec => {
+                // Si el registro no contiene la fecha (versiones antiguas), usar la hora actual
+                const fecha = rec.fecha || new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'medium' });
+                html += `<tr><td>${rec.tienda}</td><td>${rec.matricula}</td><td>${rec.circuito}</td><td>${rec.precinto}</td><td>${fecha}</td><td>${rec.sscc}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            document.getElementById('content').innerHTML = html;
+            document.getElementById('export-registros-btn').disabled = false;
+        }
+        window.addEventListener('DOMContentLoaded', () => {
+            // Establecer fecha de generación con formato local
+            const fecha = new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'medium' });
+            document.getElementById('fecha').textContent = fecha;
+            // Cargar registros guardados
+            try {
+                const data = localStorage.getItem('ssccRegistros');
+                if (!data) {
+                    renderTable([]);
+                    return;
+                }
+                const records = JSON.parse(data);
+                renderTable(records);
+            } catch (err) {
+                document.getElementById('content').innerHTML = '<p>Error al leer los registros.</p>';
+                console.error(err);
+            }
+        });
+        // Exportar la tabla de registros a Excel
+        document.getElementById('export-registros-btn').addEventListener('click', () => {
+            const tableElem = document.getElementById('tabla-registros');
+            if (!tableElem) return;
+            const workbook = XLSX.utils.table_to_book(tableElem, { sheet: 'Registros' });
+            const fileName = 'sscc_registros.xlsx';
+            XLSX.writeFile(workbook, fileName);
+        });
+    </script>
+</body>
+</html>
