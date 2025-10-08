@@ -55,7 +55,9 @@
 
   <!-- Botones -->
   <button id="export-btn" disabled>Fin de captura</button>
-  <button id="add-manual-btn">Añadir SSCC manual</button>
+  <!-- Sustituye tu botón actual por éste -->
+<button id="add-manual-btn" type="button" onclick="addManual()">Añadir SSCC manual</button>
+
 
   <!-- Tabla -->
   <table id="table">
@@ -156,14 +158,19 @@
       if (!put.ok) console.error('PUT JSONBin falló:', await put.text());
     }
 
-    function addManual() {
+   <script>
+  // ... (tu código anterior)
+
+  function addManual() {
+    try {
+      console.log('[addManual] click');
       const manualField = document.getElementById('sscc-manual');
       const manualCode = manualField.value.trim();
 
-      tiendaVal    = document.getElementById('tienda').value.trim();
-      matriculaVal = document.getElementById('matricula').value.trim();
-      circuitoVal  = document.getElementById('circuito').value.trim();
-      precintoVal  = document.getElementById('precinto').value.trim();
+      const tiendaVal    = document.getElementById('tienda').value.trim();
+      const matriculaVal = document.getElementById('matricula').value.trim();
+      const circuitoVal  = document.getElementById('circuito').value.trim();
+      const precintoVal  = document.getElementById('precinto').value.trim();
 
       if (!tiendaVal || !matriculaVal || !circuitoVal || !precintoVal) {
         alert('Completa Tienda, Matrícula, Circuito y Precinto antes de añadir SSCC.');
@@ -173,11 +180,41 @@
         alert('Introduce un SSCC.');
         return;
       }
+
       ensureFechaCreacion();
       addRow(tiendaVal, matriculaVal, circuitoVal, precintoVal, manualCode);
       document.getElementById('export-btn').disabled = false;
       manualField.value = '';
+      manualField.focus();
+    } catch (e) {
+      console.error('Error en addManual:', e);
+      alert('Ocurrió un error al añadir el SSCC. Revisa la consola (F12).');
     }
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    console.log('[DOMContentLoaded] iniciado');
+    ensureFechaCreacion();
+
+    // Listener por si falla el onclick del botón
+    const addBtn = document.getElementById('add-manual-btn');
+    if (addBtn) addBtn.addEventListener('click', addManual);
+
+    // Añadir con Enter desde el input SSCC manual
+    const ssccInput = document.getElementById('sscc-manual');
+    if (ssccInput) {
+      ssccInput.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          addManual();
+        }
+      });
+    }
+
+    document.getElementById('export-btn').addEventListener('click', finalizarCaptura);
+  });
+</script>
+
 
     // Fin de captura: SIN exportar ni correo
     function finalizarCaptura() {
