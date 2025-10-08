@@ -9,7 +9,7 @@
     h1 { text-align: center; }
     .header-inputs { display:flex; flex-wrap:wrap; gap:15px; margin-bottom:10px; }
     .header-inputs label { display:flex; flex-direction:column; font-weight:bold; }
-    .header-inputs input { padding:6px; font-size:1em; }
+    .header-inputs input, .header-inputs select { padding:6px; font-size:1em; }
     button { padding:8px 12px; font-size:1em; margin-right:10px; }
     table { width:100%; border-collapse:collapse; margin-top:20px;}
     th,td { border:1px solid #ccc; padding:8px; text-align:left;}
@@ -54,12 +54,8 @@
   </div>
 
   <!-- Botones -->
-  <button id="export-btn" disabled>Fin de captura</button>
-  <!-- Sustituye tu botón actual por éste -->
-<button id="add-manual-btn" type="button" onclick="addManual()">Añadir SSCC manual</button>
-
-
-
+  <button id="export-btn" type="button" disabled>Fin de captura</button>
+  <button id="add-manual-btn" type="button" onclick="addManual()">Añadir SSCC manual</button>
 
   <!-- Tabla -->
   <table id="table">
@@ -78,18 +74,17 @@
 
   <script>
     // ======= CONFIG REMOTA (JSONBin) =======
-    // Sustituye con tus credenciales:
+    // Sustituye con tus credenciales (opcional). Si no usas JSONBin, deja el binId como 'YOUR_BIN_ID' y no fallará la UI.
     const JSONBIN_CONFIG = {
-      binId: 68e64116ae596e708f0a5705,
-      apiKey: $2a$10$c09Py4WqcwvB8nOLsO4wNudw2bWcwKMLVTpkneHmU5qqUzf/r6Exy
+      binId: 'YOUR_BIN_ID',
+      apiKey: 'YOUR_API_KEY'
     };
 
-    // ======= ESTADO =======
-    let tiendaVal, matriculaVal, circuitoVal, precintoVal;
-
-    // Por comodidad, si no se pone fecha de creación, se deja hoy
+    // ======= UTIL =======
+    // Rellena la fecha de creación con hoy si está vacía; devuelve el valor yyyy-mm-dd
     function ensureFechaCreacion() {
       const fc = document.getElementById('fecha-creacion');
+      if (!fc) return null;
       if (!fc.value) {
         const hoy = new Date();
         const y = hoy.getFullYear();
@@ -100,8 +95,44 @@
       return fc.value;
     }
 
-    // Añadir fila y guardar en DB remota
-    async function addRow(tienda, matricula, circuito, precinto, sscc) {
+    // Guardar registro en JSONBin (append)
+    async function saveRecordToJsonBin(record) {
+      if (!JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 'YOUR_BIN_ID') {
+        // Sin configuración: no guardamos remoto, pero no rompemos la UI
+        return;
+      }
+      const apiUrl = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
+      let currentData = [];
+      try {
+        const resp = await fetch(`${apiUrl}/latest`, {
+          method: 'GET',
+          headers: { 'X-Master-Key': JSONBIN_CONFIG.apiKey, 'X-Bin-Meta': false }
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (Array.isArray(data)) currentData = data;
+          else if (data && Array.isArray(data.record)) currentData = data.record;
+        }
+      } catch (e) {
+        // Si no existe o hay error, empezamos con []
+      }
+      currentData.push(record);
+      const put = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': JSONBIN_CONFIG.apiKey,
+          'X-Bin-Versioning': 'false'
+        },
+        body: JSON.stringify(currentData)
+      });
+      if (!put.ok) {
+        console.error('PUT JSONBin falló:', await put.text());
+      }
+    }
+
+    // Añadir fila y guardar (incluye numeroFlete y fechaCreacion)
+    function addRow(tienda, matricula, circuito, precinto, sscc) {
       const tbody = document.querySelector('#table tbody');
       const row = document.createElement('tr');
       row.innerHTML = `
@@ -132,163 +163,36 @@
       saveRecordToJsonBin(record).catch(err => console.error('Error al guardar en JSONBin:', err));
     }
 
-    async function saveRecordToJsonBin(record) {
-      if (!JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 68e64116ae596e708f0a5705 return;
-      const apiUrl = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
-      let currentData = [];
+    // Añadir SSCC manual
+    function addManual() {
       try {
-        const resp = await fetch(`${apiUrl}/latest`, {
-          method: 'GET',
-          headers: { 'X-Master-Key': JSONBIN_CONFIG.apiKey, 'X-Bin-Meta': false }
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          if (Array.isArray(data)) currentData = data;
-          else if (data && Array.isArray(data.record)) currentData = data.record;
+        const manualField = document.getElementById('sscc-manual');
+        const manualCode  = manualField.value.trim();
+
+        const tiendaVal    = document.getElementById('tienda').value.trim();
+        const matriculaVal = document.getElementById('matricula').value.trim();
+        const circuitoVal  = document.getElementById('circuito').value.trim();
+        const precintoVal  = document.getElementById('precinto').value.trim();
+
+        if (!tiendaVal || !matriculaVal || !circuitoVal || !precintoVal) {
+          alert('Completa Tienda, Matrícula, Circuito y Precinto antes de añadir SSCC.');
+          return;
         }
-      } catch (e) { /* si no existe, empezamos con [] */ }
-      currentData.push(record);
-      const put = await fetch(apiUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Master-Key': JSONBIN_CONFIG.apiKey,
-          'X-Bin-Versioning': 'false'
-        },
-        body: JSON.stringify(currentData)
-      });
-      if (!put.ok) console.error('PUT JSONBin falló:', await put.text());
-    }
-
-  
-<script>
-// Rellena la fecha de creación con la fecha de hoy si está vacía
-function ensureFechaCreacion() {
-  const fc = document.getElementById('fecha-creacion');
-  if (!fc) return null; // por si el input no existe
-  if (!fc.value) {
-    const hoy = new Date();
-    const y = hoy.getFullYear();
-    const m = String(hoy.getMonth() + 1).padStart(2, '0');
-    const d = String(hoy.getDate()).padStart(2, '0');
-    fc.value = `${y}-${m}-${d}`; // yyyy-mm-dd
-  }
-  return fc.value;
-
-
-﻿
-
-<script>
-  function addManual() {
-    try {
-      const manualField = document.getElementById('sscc-manual');
-      const manualCode  = manualField.value.trim();
-
-      const tiendaVal    = document.getElementById('tienda').value.trim();
-      const matriculaVal = document.getElementById('matricula').value.trim();
-      const circuitoVal  = document.getElementById('circuito').value.trim();
-      const precintoVal  = document.getElementById('precinto').value.trim();
-
-      if (!tiendaVal || !matriculaVal || !circuitoVal || !precintoVal) {
-        alert('Completa Tienda, Matrícula, Circuito y Precinto antes de añadir SSCC.');
-        return;
-      }
-      if (!manualCode) {
-        alert('Introduce un SSCC.');
-        return;
-      }
-}
-</script>
-
-      // <-- ESTA LÍNEA ES LA QUE FALTABA
-      ensureFechaCreacion();
-
-      // sigue como ya lo tienes:
-      addRow(tiendaVal, matriculaVal, circuitoVal, precintoVal, manualCode);
-      document.getElementById('export-btn').disabled = false;
-      manualField.value = '';
-      manualField.focus();
-    } catch (e) {
-      console.error('Error en addManual:', e);
-      alert('Ocurrió un error al añadir el SSCC. Revisa la consola (F12).');
-    }
-  }
-
-  // Al cargar la página, pre-rellenar la fecha de creación
-  window.addEventListener('DOMContentLoaded', () => {
-    ensureFechaCreacion();
-
-    // Eventos (por si no usas onclick en el botón)
-    const addBtn = document.getElementById('add-manual-btn');
-    if (addBtn) addBtn.addEventListener('click', addManual);
-
-    const ssccInput = document.getElementById('sscc-manual');
-    if (ssccInput) {
-      ssccInput.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Enter') {
-          ev.preventDefault();
-          addManual();
+        if (!manualCode) {
+          alert('Introduce un SSCC.');
+          return;
         }
-      });
-    }
-  });
-</script>
 
-<script>
-  // ... (tu código anterior)
-
-  function addManual() {
-    try {
-      console.log('[addManual] click');
-      const manualField = document.getElementById('sscc-manual');
-      const manualCode = manualField.value.trim();
-
-      const tiendaVal    = document.getElementById('tienda').value.trim();
-      const matriculaVal = document.getElementById('matricula').value.trim();
-      const circuitoVal  = document.getElementById('circuito').value.trim();
-      const precintoVal  = document.getElementById('precinto').value.trim();
-
-      if (!tiendaVal || !matriculaVal || !circuitoVal || !precintoVal) {
-        alert('Completa Tienda, Matrícula, Circuito y Precinto antes de añadir SSCC.');
-        return;
+        ensureFechaCreacion();
+        addRow(tiendaVal, matriculaVal, circuitoVal, precintoVal, manualCode);
+        document.getElementById('export-btn').disabled = false;
+        manualField.value = '';
+        manualField.focus();
+      } catch (e) {
+        console.error('Error en addManual:', e);
+        alert('Ocurrió un error al añadir el SSCC. Revisa la consola (F12).');
       }
-      if (!manualCode) {
-        alert('Introduce un SSCC.');
-        return;
-      }
-
-      ensureFechaCreacion();
-      addRow(tiendaVal, matriculaVal, circuitoVal, precintoVal, manualCode);
-      document.getElementById('export-btn').disabled = false;
-      manualField.value = '';
-      manualField.focus();
-    } catch (e) {
-      console.error('Error en addManual:', e);
-      alert('Ocurrió un error al añadir el SSCC. Revisa la consola (F12).');
     }
-  }
-
-  window.addEventListener('DOMContentLoaded', () => {
-    console.log('[DOMContentLoaded] iniciado');
-    ensureFechaCreacion();
-
-    // Listener por si falla el onclick del botón
-    const addBtn = document.getElementById('add-manual-btn');
-    if (addBtn) addBtn.addEventListener('click', addManual);
-
-    // Añadir con Enter desde el input SSCC manual
-    const ssccInput = document.getElementById('sscc-manual');
-    if (ssccInput) {
-      ssccInput.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Enter') {
-          ev.preventDefault();
-          addManual();
-        }
-      });
-    }
-
-    document.getElementById('export-btn').addEventListener('click', finalizarCaptura);
-  });
 
     // Fin de captura: SIN exportar ni correo
     function finalizarCaptura() {
@@ -313,10 +217,22 @@ function ensureFechaCreacion() {
       document.getElementById('export-btn').disabled = true;
     }
 
-    // Eventos
+    // Al cargar la página
     window.addEventListener('DOMContentLoaded', () => {
       ensureFechaCreacion();
-      document.getElementById('add-manual-btn').addEventListener('click', addManual);
+      const addBtn = document.getElementById('add-manual-btn');
+      if (addBtn) addBtn.addEventListener('click', addManual);
+
+      const ssccInput = document.getElementById('sscc-manual');
+      if (ssccInput) {
+        ssccInput.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') {
+            ev.preventDefault();
+            addManual();
+          }
+        });
+      }
+
       document.getElementById('export-btn').addEventListener('click', finalizarCaptura);
     });
   </script>
