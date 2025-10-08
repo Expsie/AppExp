@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de SSCC – BarcodeDetector</title>
+    <style>
+        /* Estilos básicos para mantener la página clara y ordenada */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.4;
+        }
+        h1 {
+            text-align: center;
+        }
+        .header-inputs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        .header-inputs label {
+            display: flex;
+            flex-direction: column;
+            font-weight: bold;
+        }
+        .header-inputs input {
+            padding: 6px;
+            font-size: 1em;
+        }
+        button {
+            padding: 8px 12px;
+            font-size: 1em;
+            margin-right: 10px;
+        }
+        #video-container {
+            width: 100%;
+            max-width: 600px;
+            margin: 20px auto;
+            position: relative;
+        }
+        #video {
+            width: 100%;
+            border: 2px solid #ddd;
+        }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tbody tr:nth-child(odd) {
+            background-color: #fafafa;
+        }
+    </style>
+</head>
+<body>
+    <h1>Registro de códigos SSCC – BarcodeDetector</h1>
+    <!-- Entradas de cabecera -->
+    <div class="header-inputs">
+        <label>
+            Tienda
+            <input type="text" id="tienda" placeholder="Código o nombre de la tienda">
+        </label>
+        <label>
+            Matrícula
+            <input type="text" id="matricula" placeholder="Matrícula del vehículo">
+        </label>
+        <label>
+            Circuito
+            <input type="text" id="circuito" placeholder="Circuito o ruta">
+        </label>
+        <label>
+            Precinto
+            <input type="text" id="precinto" placeholder="Número de precinto">
+        </label>
+        <!-- Campo para introducir manualmente un SSCC si no se puede escanear -->
+        <label>
+            SSCC manual
+            <input type="text" id="sscc-manual" placeholder="Introduce SSCC manualmente">
+        </label>
+        <!-- Campo de correo electrónico para enviar el Excel -->
+        <label>
+            Correo electrónico
+            <input type="email" id="correo" placeholder="correo@ejemplo.com">
+        </label>
+    </div>
+    <!-- Botones de control -->
+    <button id="start-btn">Iniciar escaneo</button>
+    <button id="stop-btn" disabled>Detener escaneo</button>
+    <button id="export-btn" disabled>Fin de captura (exportar)</button>
+    <!-- Botón para añadir manualmente un SSCC a la tabla -->
+    <button id="add-manual-btn">Añadir SSCC manual</button>
+    <!-- Contenedor del vídeo y overlay para dibujar cajas -->
+    <div id="video-container" style="display:none;">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+    </div>
+    <!-- Tabla de resultados -->
+        <table id="table">
+        <thead>
+            <tr>
+                <th>Tienda</th>
+                <th>Matrícula</th>
+                <th>Circuito</th>
+                <th>Precinto</th>
+                <th>SSCC escaneado</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <!-- Librería SheetJS para exportar -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <!-- Librería SMTPJS para envío de correos electrónicos -->
+    <script src="https://smtpjs.com/v3/smtp.js"></script>
+    <!-- Cargar el polyfill de BarcodeDetector si el navegador no lo soporta -->
+    <script type="module">
+        // Función asincrónica para preparar el BarcodeDetector (native o polyfill)
+        async function prepareBarcodeDetector() {
+            if (!('BarcodeDetector' in window)) {
+                // Cargar el polyfill de manera dinámica
+                const module = await import('https://fastly.jsdelivr.net/npm/barcode-detector@3/dist/es/polyfill.min.js');
+                // Inicializar la clase BarcodeDetector con el polyfill
+                window.BarcodeDetector = module.BarcodeDetectorPolyfill;
+            }
+        }
+        // Llamar al preparador de BarcodeDetector
+        await prepareBarcodeDetector();
+        // Acceso a elementos del DOM
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const videoContainer = document.getElementById('video-container');
+        const videoElem = document.getElementById('video');
+        const overlay = document.getElementById('overlay');
+        const ctx = overlay.getContext('2d');
+        let detector;
+        let scanning = false;
+        // Variables para almacenar cabecera
+        let tiendaVal, matriculaVal, circuitoVal, precintoVal;
+
+        // Configuración SMTP opcional
+        // Reemplaza 'YOUR_SECURE_TOKEN' por el token generado en smtpjs.com
+        // y 'FROM_ADDRESS' por la dirección remitente autorizada.
+        const SMTP_CONFIG = {
+            SecureToken: 'YOUR_SECURE_TOKEN',
+            From: 'FROM_ADDRESS'
+        };
+        // Función para iniciar el escaneo
+        async function startScanner() {
+            tiendaVal = document.getElementById('tienda').value.trim();
+            matriculaVal = document.getElementById('matricula').value.trim();
+            circuitoVal = document.getElementById('circuito').value.trim();
+            precintoVal = document.getElementById('precinto').value.trim();
+            if (!tiendaVal || !matriculaVal || !circuitoVal || !precintoVal) {
+                alert('Por favor, completa los campos Tienda, Matrícula, Circuito y Precinto antes de escanear.');
+                return;
+            }
+            if (scanning) return;
+            // Mostrar el contenedor del vídeo
+            videoContainer.style.display = 'block';
+            // Solicitar acceso a la cámara
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                videoElem.srcObject = stream;
+                await videoElem.play();
+            } catch (err) {
+                console.error('No se pudo acceder a la cámara:', err);
+                alert('No se pudo acceder a la cámara. Asegúrate de conceder permisos y de estar usando localhost o HTTPS.');
+                return;
+            }
+            // Determinar los formatos de códigos de barras soportados por el navegador/polyfill
+            let supportedFormats = [];
+            try {
+                supportedFormats = await BarcodeDetector.getSupportedFormats();
+            } catch (err) {
+                console.warn('No se pudo obtener la lista de formatos soportados:', err);
+            }
+            // Elegir únicamente los formatos que nos interesan y que están disponibles
+            const requestedFormats = ['code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'itf', 'upc_a', 'upc_e'];
+            const formatsToUse = supportedFormats.filter(fmt => requestedFormats.includes(fmt));
+            // Si el navegador no retorna formatos soportados, usar nuestra lista por defecto
+            const detectorFormats = formatsToUse.length > 0 ? formatsToUse : requestedFormats;
+            detector = new BarcodeDetector({ formats: detectorFormats });
+            scanning = true;
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            // Ajustar tamaño del canvas al tamaño del vídeo
+            function resizeOverlay() {
+                overlay.width = videoElem.videoWidth;
+                overlay.height = videoElem.videoHeight;
+            }
+            // Llamar al primer ajuste de tamaño cuando el vídeo esté listo
+            if (videoElem.readyState >= 2) {
+                resizeOverlay();
+            } else {
+                videoElem.addEventListener('loadeddata', resizeOverlay);
+            }
+            // Función recursiva para detectar códigos de barras frame a frame
+            async function detectionLoop() {
+                if (!scanning) return;
+                try {
+                    const barcodes = await detector.detect(videoElem);
+                    // Limpiar overlay
+                    ctx.clearRect(0, 0, overlay.width, overlay.height);
+                    if (barcodes && barcodes.length > 0) {
+                        barcodes.forEach((barcode) => {
+                            const code = barcode.rawValue;
+                            // Dibujar la caja del código si tenemos cornerPoints
+                            if (barcode.cornerPoints) {
+                                ctx.strokeStyle = 'lime';
+                                ctx.lineWidth = 2;
+                                ctx.beginPath();
+                                barcode.cornerPoints.forEach((point, index) => {
+                                    if (index === 0) {
+                                        ctx.moveTo(point.x, point.y);
+                                    } else {
+                                        ctx.lineTo(point.x, point.y);
+                                    }
+                                });
+                                ctx.closePath();
+                                ctx.stroke();
+                            }
+                            // Añadir la fila a la tabla con la cabecera y el código
+                            addRow(tiendaVal, matriculaVal, circuitoVal, precintoVal, code);
+                            exportBtn.disabled = false;
+                        });
+                    }
+                } catch (e) {
+                    // Silenciar errores de detección
+                }
+                // Continuar con el siguiente frame
+                requestAnimationFrame(detectionLoop);
+            }
+            // Iniciar el bucle de detección
+            requestAnimationFrame(detectionLoop);
+            // Llevar el foco a la entrada de SSCC manual para que el usuario pueda introducir o escanear rápidamente
+            document.getElementById('sscc-manual').focus();
+            // Desplazar la vista para mostrar el área de escaneo y la entrada de SSCC manual
+            document.getElementById('video-container').scrollIntoView({ behavior: 'smooth' });
+        }
+        // Función para detener el escaneo
+        function stopScanner() {
+            if (!scanning) return;
+            scanning = false;
+            // Detener los tracks de la cámara
+            const stream = videoElem.srcObject;
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            videoElem.srcObject = null;
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+            videoContainer.style.display = 'none';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+        // Función para agregar una fila a la tabla
+        function addRow(tienda, matricula, circuito, precinto, sscc) {
+            const tbody = document.querySelector('#table tbody');
+            const row = document.createElement('tr');
+            // Insertar todas las celdas y un botón para eliminar la fila
+            row.innerHTML = `
+                <td>${tienda}</td>
+                <td>${matricula}</td>
+                <td>${circuito}</td>
+                <td>${precinto}</td>
+                <td>${sscc}</td>
+                <td><button type="button" class="delete-row">Eliminar</button></td>
+            `;
+            // Añadir evento al botón de eliminación
+            const deleteBtn = row.querySelector('.delete-row');
+            deleteBtn.addEventListener('click', () => {
+                row.remove();
+                // Deshabilitar exportación si no quedan registros
+                if (tbody.children.length === 0) {
+                    exportBtn.disabled = true;
+                }
+            });
+            tbody.appendChild(row);
+        }
+        // Función para exportar la tabla a un archivo Excel
+        function exportTable() {
+            // Detener la captura si se está escaneando
+            if (scanning) {
+                stopScanner();
+            }
+            const tableElem = document.getElementById('table');
+            const workbook = XLSX.utils.table_to_book(tableElem, { sheet: 'Expedición' });
+            const fileName = 'registro_de_expedicion_LLS_Palma.xlsx';
+            XLSX.writeFile(workbook, fileName);
+            const correo = document.getElementById('correo').value.trim();
+            if (correo) {
+                // Intentar enviar el correo automáticamente si SMTP está configurado
+                const tokenConfigured = SMTP_CONFIG.SecureToken && SMTP_CONFIG.SecureToken !== 'YOUR_SECURE_TOKEN';
+                const fromConfigured = SMTP_CONFIG.From && SMTP_CONFIG.From !== 'FROM_ADDRESS';
+                if (tokenConfigured && fromConfigured) {
+                    // Confirmar con el usuario antes de enviar correo automático
+                    if (confirm(`¿Deseas enviar el fichero Excel automáticamente a ${correo}?`)) {
+                        // Convertir el workbook a base64 para el adjunto
+                        const base64 = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+                        const dataUri = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + base64;
+                        Email.send({
+                            SecureToken: SMTP_CONFIG.SecureToken,
+                            To: correo,
+                            From: SMTP_CONFIG.From,
+                            Subject: 'Registro de expedición LLS Palma',
+                            Body: 'Se adjunta el archivo Excel con los registros de expedición.',
+                            Attachments: [
+                                {
+                                    name: fileName,
+                                    data: dataUri
+                                }
+                            ]
+                        }).then(message => {
+                            alert('Correo enviado: ' + message);
+                        }).catch(error => {
+                            alert('No se pudo enviar el correo automáticamente: ' + error + '\nSe abrirá el cliente de correo predeterminado.');
+                            abrirMailto(correo);
+                        });
+                    } else {
+                        // Usuario canceló envío automático; abrir mailto
+                        abrirMailto(correo);
+                    }
+                } else {
+                    // SMTP no configurado; usar mailto
+                    abrirMailto(correo);
+                }
+            }
+        }
+        // Función auxiliar para abrir el cliente de correo con un mailto
+        function abrirMailto(correo) {
+            const subject = encodeURIComponent('Registro de expedición LLS Palma');
+            const body = encodeURIComponent('Adjunto el archivo Excel con los registros de expedición. Por favor, revisa el archivo y confírmame la recepción.');
+            const mailtoLink = `mailto:${correo}?subject=${subject}&body=${body}`;
+            // Pequeña pausa para dar tiempo a la descarga del archivo
+            setTimeout(() => {
+                window.location.href = mailtoLink;
+            }, 500);
+        }
+        // Asociar eventos a los botones
+        startBtn.addEventListener('click', startScanner);
+        stopBtn.addEventListener('click', stopScanner);
+        exportBtn.addEventListener('click', exportTable);
+        // Añadir SSCC manualmente
+        document.getElementById('add-manual-btn').addEventListener('click', () => {
+            const manualField = document.getElementById('sscc-manual');
+            const manualCode = manualField.value.trim();
+            // Verificar que existe un código y que la cabecera está completa
+            // Utilizar las variables almacenadas o leerlas si no se inició el escaneo
+            const tienda = tiendaVal || document.getElementById('tienda').value.trim();
+            const matricula = matriculaVal || document.getElementById('matricula').value.trim();
+            const circuito = circuitoVal || document.getElementById('circuito').value.trim();
+            const precinto = precintoVal || document.getElementById('precinto').value.trim();
+            if (!tienda || !matricula || !circuito || !precinto) {
+                alert('Por favor, rellena los campos de cabecera (Tienda, Matrícula, Circuito y Precinto) antes de añadir un SSCC manual.');
+                return;
+            }
+            if (!manualCode) {
+                alert('Introduce el código SSCC que deseas añadir manualmente.');
+                return;
+            }
+            // Añadir la fila a la tabla con los datos introducidos
+            addRow(tienda, matricula, circuito, precinto, manualCode);
+            exportBtn.disabled = false;
+            // Limpiar el campo para futuras entradas
+            manualField.value = '';
+        });
+    </script>
+</body>
+</html>
