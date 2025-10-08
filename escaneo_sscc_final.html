@@ -131,8 +131,8 @@
         // Configuración JSONBin: identifica el bin y la clave para almacenar los registros remotamente
         // Debes sustituir los valores por los datos de tu bin y tu API key de jsonbin.io
         const JSONBIN_CONFIG = {
-            binId: 'YOUR_BIN_ID',
-            apiKey: 'YOUR_API_KEY'
+            binId: 68e64116ae596e708f0a5705 ,
+            apiKey: $2a$10$c09Py4WqcwvB8nOLsO4wNudw2bWcwKMLVTpkneHmU5qqUzf/r6Exy
         };
         // Función para iniciar el escáner (desactivada)
         function startScanner() {
@@ -187,7 +187,7 @@
         // Función para guardar registros en JSONBin
         async function saveRecordToJsonBin(record) {
             // Verificar si se han definido los datos de configuración de JSONBin
-            if (!JSONBIN_CONFIG || !JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 'YOUR_BIN_ID') {
+            if (!JSONBIN_CONFIG || !JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 68e64116ae596e708f0a5705 ) {
                 return;
             }
             const apiUrl = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
