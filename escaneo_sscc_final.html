@@ -1,310 +1,213 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registro de SSCC – Lector mejorado</title>
-    <style>
-        /* Estilos básicos para mantener la página clara y ordenada */
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            line-height: 1.4;
-        }
-        h1 {
-            text-align: center;
-        }
-        .header-inputs {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            margin-bottom: 10px;
-        }
-        .header-inputs label {
-            display: flex;
-            flex-direction: column;
-            font-weight: bold;
-        }
-        .header-inputs input {
-            padding: 6px;
-            font-size: 1em;
-        }
-        button {
-            padding: 8px 12px;
-            font-size: 1em;
-            margin-right: 10px;
-        }
-        #scanner-container {
-            width: 100%;
-            max-width: 600px;
-            margin: 20px auto;
-            position: relative;
-        }
-        #scanner {
-            width: 100%;
-            border: 2px solid #ddd;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-        tbody tr:nth-child(odd) {
-            background-color: #fafafa;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Registro de SSCC – Captura manual</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.4; }
+    h1 { text-align: center; }
+    .header-inputs { display:flex; flex-wrap:wrap; gap:15px; margin-bottom:10px; }
+    .header-inputs label { display:flex; flex-direction:column; font-weight:bold; }
+    .header-inputs input { padding:6px; font-size:1em; }
+    button { padding:8px 12px; font-size:1em; margin-right:10px; }
+    table { width:100%; border-collapse:collapse; margin-top:20px;}
+    th,td { border:1px solid #ccc; padding:8px; text-align:left;}
+    th { background:#f2f2f2;}
+    tbody tr:nth-child(odd){ background:#fafafa;}
+  </style>
 </head>
 <body>
-    <h1>Registro de códigos SSCC – Lector mejorado</h1>
-    <!-- Entradas de cabecera -->
-    <div class="header-inputs">
-        <label>
-            Tienda
-            <input type="text" id="tienda" placeholder="Código o nombre de la tienda">
-        </label>
-        <label>
-            Matrícula
-            <input type="text" id="matricula" placeholder="Matrícula del vehículo">
-        </label>
-        <label>
-            Circuito
-            <input type="text" id="circuito" placeholder="Circuito o ruta">
-        </label>
-        <label>
-            Precinto
-            <input type="text" id="precinto" placeholder="Número de precinto">
-        </label>
-        <label>
-            SSCC manual
-            <input type="text" id="sscc-manual" placeholder="Introduce SSCC manualmente">
-        </label>
-        <label>
-            Correo electrónico
-            <input type="email" id="correo" placeholder="correo@ejemplo.com">
-        </label>
-    </div>
-    <!-- Botones de control -->
-    <!-- Se desactiva la captura con cámara: se ocultan los botones de inicio y cancelación -->
-    <button id="start-btn" style="display:none;">Iniciar escaneo</button>
-    <button id="stop-btn" style="display:none;" disabled>Cancelar escaneo</button>
-    <button id="export-btn" disabled>Fin de captura (exportar)</button>
-    <button id="add-manual-btn">Añadir SSCC manual</button>
-    <!-- Contenedor del escáner eliminado: ya no se muestra ninguna vista de cámara -->
-    <!-- Tabla de resultados -->
-    <table id="table">
-        <thead>
-            <tr>
-                <th>Tienda</th>
-                <th>Matrícula</th>
-                <th>Circuito</th>
-                <th>Precinto</th>
-                <th>SSCC escaneado</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
-    <!-- Se elimina la librería de escaneo por cámara porque la captura se realiza manualmente -->
-    <!-- Librería SheetJS para exportar los registros -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
-    <!-- Librería SMTPJS para envío de correos electrónicos -->
-    <script src="https://smtpjs.com/v3/smtp.js"></script>
-    <script>
-        // Variables de estado
-        // Se mantiene la variable de escaneo para compatibilidad con las funciones de exportación
-        let scanning = false;
-        // Variables para almacenar valores de cabecera
-        let tiendaVal, matriculaVal, circuitoVal, precintoVal;
-        // Configuración SMTP opcional
-        const SMTP_CONFIG = {
-            SecureToken: 'YOUR_SECURE_TOKEN', // Sustituye por tu token de smtpjs.com si lo deseas
-            From: 'FROM_ADDRESS'              // Sustituye por tu correo remitente
-        };
-        // Configuración JSONBin: identifica el bin y la clave para almacenar los registros remotamente
-        // Debes sustituir los valores por los datos de tu bin y tu API key de jsonbin.io
-        const JSONBIN_CONFIG = {
-            binId: 68e64116ae596e708f0a5705 ,
-            apiKey: $2a$10$c09Py4WqcwvB8nOLsO4wNudw2bWcwKMLVTpkneHmU5qqUzf/r6Exy
-        };
-        // Función para iniciar el escáner (desactivada)
-        function startScanner() {
-            alert('La captura con cámara ha sido desactivada en esta versión. Por favor, introduce los códigos en el campo "SSCC manual" y utiliza el botón "Añadir SSCC manual".');
-        }
-        // Manejador de detecciones (sin uso cuando se ha desactivado el escáner)
-        function onDetectedHandler() {
-            // Esta función se deja por compatibilidad, pero no hace nada porque no hay escaneo.
-        }
-        // Función para detener el escaneo y liberar la cámara
-        function stopScanner() {
-            // Al no haber escaneo con cámara, esta función solo restablece el estado de "scanning".
-            if (!scanning) return;
-            scanning = false;
-            document.getElementById('start-btn').disabled = false;
-            document.getElementById('stop-btn').disabled = true;
-        }
-        // Función para añadir una fila a la tabla
-        function addRow(tienda, matricula, circuito, precinto, sscc) {
-            const tbody = document.querySelector('#table tbody');
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${tienda}</td>
-                <td>${matricula}</td>
-                <td>${circuito}</td>
-                <td>${precinto}</td>
-                <td>${sscc}</td>
-                <td><button type="button" class="delete-row">Eliminar</button></td>
-            `;
-            // Asignar evento para eliminar fila
-            row.querySelector('.delete-row').addEventListener('click', () => {
-                row.remove();
-                const tbody = document.querySelector('#table tbody');
-                if (tbody.children.length === 0) {
-                    document.getElementById('export-btn').disabled = true;
-                }
-            });
-            tbody.appendChild(row);
+  <h1>Registro de códigos SSCC – Captura manual</h1>
 
-            // Guardar el registro en la base remota (JSONBin) si se ha configurado
-            const record = {
-                tienda,
-                matricula,
-                circuito,
-                precinto,
-                sscc,
-                fecha: new Date().toISOString()
-            };
-            saveRecordToJsonBin(record).catch(err => console.error('Error al guardar en JSONBin:', err));
-        }
+  <!-- Cabecera -->
+  <div class="header-inputs">
+    <label>
+      Tienda
+      <input type="text" id="tienda" placeholder="Código o nombre de la tienda">
+    </label>
+    <label>
+      Matrícula
+      <input type="text" id="matricula" placeholder="Matrícula del vehículo">
+    </label>
+    <label>
+      Circuito
+      <input type="text" id="circuito" placeholder="Circuito o ruta">
+    </label>
+    <label>
+      Precinto
+      <input type="text" id="precinto" placeholder="Número de precinto">
+    </label>
+    <label>
+      SSCC manual
+      <input type="text" id="sscc-manual" placeholder="Introduce SSCC manualmente">
+    </label>
+    <!-- NUEVOS CAMPOS -->
+    <label>
+      Número de flete
+      <input type="number" id="numero-flete" min="1" step="1" value="1">
+    </label>
+    <label>
+      Fecha de creación
+      <input type="date" id="fecha-creacion">
+    </label>
+  </div>
 
-        // Función para guardar registros en JSONBin
-        async function saveRecordToJsonBin(record) {
-            // Verificar si se han definido los datos de configuración de JSONBin
-            if (!JSONBIN_CONFIG || !JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 68e64116ae596e708f0a5705 ) {
-                return;
-            }
-            const apiUrl = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
-            let currentData = [];
-            try {
-                // Recuperar la versión más reciente de los datos
-                const resp = await fetch(`${apiUrl}/latest`, {
-                    method: 'GET',
-                    headers: {
-                        'X-Master-Key': JSONBIN_CONFIG.apiKey,
-                        'X-Bin-Meta': false
-                    }
-                });
-                if (resp.ok) {
-                    const data = await resp.json();
-                    if (Array.isArray(data)) {
-                        currentData = data;
-                    } else if (data && Array.isArray(data.record)) {
-                        currentData = data.record;
-                    }
-                }
-            } catch (err) {
-                console.warn('No se pudo leer el contenido actual del bin:', err);
-            }
-            // Añadir el nuevo registro
-            currentData.push(record);
-            try {
-                // Actualizar el bin con el nuevo arreglo
-                const updateResp = await fetch(apiUrl, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Master-Key': JSONBIN_CONFIG.apiKey,
-                        // Desactivar versionado para sobrescribir en lugar de crear una nueva versión
-                        'X-Bin-Versioning': 'false'
-                    },
-                    body: JSON.stringify(currentData)
-                });
-                if (!updateResp.ok) {
-                    console.error('Error al actualizar JSONBin:', await updateResp.text());
-                }
-            } catch (err) {
-                console.error('No se pudo actualizar el bin:', err);
-            }
+  <!-- Botones -->
+  <button id="export-btn" disabled>Fin de captura</button>
+  <button id="add-manual-btn">Añadir SSCC manual</button>
+
+  <!-- Tabla -->
+  <table id="table">
+    <thead>
+    <tr>
+      <th>Tienda</th>
+      <th>Matrícula</th>
+      <th>Circuito</th>
+      <th>Precinto</th>
+      <th>SSCC</th>
+      <th>Acciones</th>
+    </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    // ======= CONFIG REMOTA (JSONBin) =======
+    // Sustituye con tus credenciales:
+    const JSONBIN_CONFIG = {
+      binId: 'YOUR_BIN_ID',
+      apiKey: 'YOUR_API_KEY'
+    };
+
+    // ======= ESTADO =======
+    let tiendaVal, matriculaVal, circuitoVal, precintoVal;
+
+    // Por comodidad, si no se pone fecha de creación, se deja hoy
+    function ensureFechaCreacion() {
+      const fc = document.getElementById('fecha-creacion');
+      if (!fc.value) {
+        const hoy = new Date();
+        const y = hoy.getFullYear();
+        const m = String(hoy.getMonth()+1).padStart(2,'0');
+        const d = String(hoy.getDate()).padStart(2,'0');
+        fc.value = `${y}-${m}-${d}`;
+      }
+      return fc.value;
+    }
+
+    // Añadir fila y guardar en DB remota
+    async function addRow(tienda, matricula, circuito, precinto, sscc) {
+      const tbody = document.querySelector('#table tbody');
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${tienda}</td>
+        <td>${matricula}</td>
+        <td>${circuito}</td>
+        <td>${precinto}</td>
+        <td>${sscc}</td>
+        <td><button type="button" class="delete-row">Eliminar</button></td>
+      `;
+      row.querySelector('.delete-row').addEventListener('click', () => {
+        row.remove();
+        if (tbody.children.length === 0) {
+          document.getElementById('export-btn').disabled = true;
         }
-        // Función para añadir SSCC manualmente
-        function addManual() {
-            const manualField = document.getElementById('sscc-manual');
-            const manualCode = manualField.value.trim();
-            const tienda = tiendaVal || document.getElementById('tienda').value.trim();
-            const matricula = matriculaVal || document.getElementById('matricula').value.trim();
-            const circuito = circuitoVal || document.getElementById('circuito').value.trim();
-            const precinto = precintoVal || document.getElementById('precinto').value.trim();
-            if (!tienda || !matricula || !circuito || !precinto) {
-                alert('Por favor, rellena los campos de cabecera (Tienda, Matrícula, Circuito y Precinto) antes de añadir un SSCC manual.');
-                return;
-            }
-            if (!manualCode) {
-                alert('Introduce el código SSCC que deseas añadir manualmente.');
-                return;
-            }
-            addRow(tienda, matricula, circuito, precinto, manualCode);
-            document.getElementById('export-btn').disabled = false;
-            manualField.value = '';
+      });
+      tbody.appendChild(row);
+
+      // Guardado remoto
+      const numeroFlete = parseInt(document.getElementById('numero-flete').value || '1', 10);
+      const fechaCreacion = ensureFechaCreacion(); // yyyy-mm-dd
+      const record = {
+        tienda, matricula, circuito, precinto, sscc,
+        numeroFlete,
+        fechaCreacion,                        // fecha de la cabecera
+        fecha: new Date().toISOString()       // timestamp de la línea
+      };
+      saveRecordToJsonBin(record).catch(err => console.error('Error al guardar en JSONBin:', err));
+    }
+
+    async function saveRecordToJsonBin(record) {
+      if (!JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 'YOUR_BIN_ID') return;
+      const apiUrl = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
+      let currentData = [];
+      try {
+        const resp = await fetch(`${apiUrl}/latest`, {
+          method: 'GET',
+          headers: { 'X-Master-Key': JSONBIN_CONFIG.apiKey, 'X-Bin-Meta': false }
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (Array.isArray(data)) currentData = data;
+          else if (data && Array.isArray(data.record)) currentData = data.record;
         }
-        // Función para exportar la tabla a Excel y enviar por correo
-        function exportTable() {
-            if (scanning) {
-                stopScanner();
-            }
-            const tableElem = document.getElementById('table');
-            const workbook = XLSX.utils.table_to_book(tableElem, { sheet: 'Expedición' });
-            const fileName = 'registro_de_expedicion_LLS_Palma.xlsx';
-            XLSX.writeFile(workbook, fileName);
-            const correo = document.getElementById('correo').value.trim();
-            if (correo) {
-                const tokenConfigured = SMTP_CONFIG.SecureToken && SMTP_CONFIG.SecureToken !== 'YOUR_SECURE_TOKEN';
-                const fromConfigured = SMTP_CONFIG.From && SMTP_CONFIG.From !== 'FROM_ADDRESS';
-                if (tokenConfigured && fromConfigured) {
-                    if (confirm(`¿Deseas enviar el fichero Excel automáticamente a ${correo}?`)) {
-                        const base64 = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
-                        const dataUri = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + base64;
-                        Email.send({
-                            SecureToken: SMTP_CONFIG.SecureToken,
-                            To: correo,
-                            From: SMTP_CONFIG.From,
-                            Subject: 'Registro de expedición LLS Palma',
-                            Body: 'Se adjunta el archivo Excel con los registros de expedición.',
-                            Attachments: [ { name: fileName, data: dataUri } ]
-                        }).then(message => {
-                            alert('Correo enviado: ' + message);
-                        }).catch(error => {
-                            alert('No se pudo enviar el correo automáticamente: ' + error + '\nSe abrirá el cliente de correo predeterminado.');
-                            abrirMailto(correo);
-                        });
-                    } else {
-                        abrirMailto(correo);
-                    }
-                } else {
-                    abrirMailto(correo);
-                }
-            }
-        }
-        // Función auxiliar para abrir un mailto
-        function abrirMailto(correo) {
-            const subject = encodeURIComponent('Registro de expedición LLS Palma');
-            const body = encodeURIComponent('Adjunto el archivo Excel con los registros de expedición. Por favor, revisa el archivo y confírmame la recepción.');
-            const mailtoLink = `mailto:${correo}?subject=${subject}&body=${body}`;
-            setTimeout(() => {
-                window.location.href = mailtoLink;
-            }, 500);
-        }
-        // Asociar eventos a los botones
-        document.getElementById('start-btn').addEventListener('click', startScanner);
-        document.getElementById('stop-btn').addEventListener('click', stopScanner);
-        document.getElementById('export-btn').addEventListener('click', exportTable);
-        document.getElementById('add-manual-btn').addEventListener('click', addManual);
-    </script>
+      } catch (e) { /* si no existe, empezamos con [] */ }
+      currentData.push(record);
+      const put = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': JSONBIN_CONFIG.apiKey,
+          'X-Bin-Versioning': 'false'
+        },
+        body: JSON.stringify(currentData)
+      });
+      if (!put.ok) console.error('PUT JSONBin falló:', await put.text());
+    }
+
+    function addManual() {
+      const manualField = document.getElementById('sscc-manual');
+      const manualCode = manualField.value.trim();
+
+      tiendaVal    = document.getElementById('tienda').value.trim();
+      matriculaVal = document.getElementById('matricula').value.trim();
+      circuitoVal  = document.getElementById('circuito').value.trim();
+      precintoVal  = document.getElementById('precinto').value.trim();
+
+      if (!tiendaVal || !matriculaVal || !circuitoVal || !precintoVal) {
+        alert('Completa Tienda, Matrícula, Circuito y Precinto antes de añadir SSCC.');
+        return;
+      }
+      if (!manualCode) {
+        alert('Introduce un SSCC.');
+        return;
+      }
+      ensureFechaCreacion();
+      addRow(tiendaVal, matriculaVal, circuitoVal, precintoVal, manualCode);
+      document.getElementById('export-btn').disabled = false;
+      manualField.value = '';
+    }
+
+    // Fin de captura: SIN exportar ni correo
+    function finalizarCaptura() {
+      // 1) Incrementar el número de flete
+      const nf = document.getElementById('numero-flete');
+      const actual = parseInt(nf.value || '1', 10);
+      nf.value = String(actual + 1);
+
+      // 2) Limpiar formulario (excepto número de flete, que ya se incrementó)
+      document.getElementById('tienda').value = '';
+      document.getElementById('matricula').value = '';
+      document.getElementById('circuito').value = '';
+      document.getElementById('precinto').value = '';
+      document.getElementById('sscc-manual').value = '';
+
+      // 3) Resetear fecha de creación a hoy (nueva captura)
+      document.getElementById('fecha-creacion').value = '';
+
+      // 4) Limpiar tabla
+      const tbody = document.querySelector('#table tbody');
+      tbody.innerHTML = '';
+      document.getElementById('export-btn').disabled = true;
+    }
+
+    // Eventos
+    window.addEventListener('DOMContentLoaded', () => {
+      ensureFechaCreacion();
+      document.getElementById('add-manual-btn').addEventListener('click', addManual);
+      document.getElementById('export-btn').addEventListener('click', finalizarCaptura);
+    });
+  </script>
 </body>
 </html>
