@@ -161,15 +161,30 @@
     }
 
   
+<script>
+// Rellena la fecha de creación con la fecha de hoy si está vacía
+function ensureFechaCreacion() {
+  const fc = document.getElementById('fecha-creacion');
+  if (!fc) return null; // por si el input no existe
+  if (!fc.value) {
+    const hoy = new Date();
+    const y = hoy.getFullYear();
+    const m = String(hoy.getMonth() + 1).padStart(2, '0');
+    const d = String(hoy.getDate()).padStart(2, '0');
+    fc.value = `${y}-${m}-${d}`; // yyyy-mm-dd
+  }
+  return fc.value;
+}
+</script>
+
+
+﻿
 
 <script>
-  // ... (tu código anterior)
-
   function addManual() {
     try {
-      console.log('[addManual] click');
       const manualField = document.getElementById('sscc-manual');
-      const manualCode = manualField.value.trim();
+      const manualCode  = manualField.value.trim();
 
       const tiendaVal    = document.getElementById('tienda').value.trim();
       const matriculaVal = document.getElementById('matricula').value.trim();
@@ -185,7 +200,10 @@
         return;
       }
 
+      // <-- ESTA LÍNEA ES LA QUE FALTABA
       ensureFechaCreacion();
+
+      // sigue como ya lo tienes:
       addRow(tiendaVal, matriculaVal, circuitoVal, precintoVal, manualCode);
       document.getElementById('export-btn').disabled = false;
       manualField.value = '';
@@ -196,15 +214,14 @@
     }
   }
 
+  // Al cargar la página, pre-rellenar la fecha de creación
   window.addEventListener('DOMContentLoaded', () => {
-    console.log('[DOMContentLoaded] iniciado');
     ensureFechaCreacion();
 
-    // Listener por si falla el onclick del botón
+    // Eventos (por si no usas onclick en el botón)
     const addBtn = document.getElementById('add-manual-btn');
     if (addBtn) addBtn.addEventListener('click', addManual);
 
-    // Añadir con Enter desde el input SSCC manual
     const ssccInput = document.getElementById('sscc-manual');
     if (ssccInput) {
       ssccInput.addEventListener('keydown', (ev) => {
@@ -214,10 +231,9 @@
         }
       });
     }
-
-    document.getElementById('export-btn').addEventListener('click', finalizarCaptura);
   });
 </script>
+
 <script>
   // ... (tu código anterior)
 
