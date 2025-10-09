@@ -57,15 +57,22 @@
         return;
       }
 
-      const data = await resp.json();
+     const data = await resp.json();
 
-      // ✅ Normalización a prueba de formatos
-      if (Array.isArray(data)) {
-        allRecords = data;
-      } else if (data && Array.isArray(data.record)) {
-        allRecords = data.record;
-      } else {
-        allRecords = [];
+// Normalización a prueba de formatos:
+// - Si JSONBin devuelve un array directo → úsalo
+// - Si devuelve { record: [...] } → usa ese array
+// - Si devuelve otra cosa (número, objeto, etc.) → no falles
+if (Array.isArray(data)) {
+  allRecords = data;
+} else if (data && Array.isArray(data.record)) {
+  allRecords = data.record;
+} else {
+  allRecords = [];
+}
+
+renderTable(allRecords);
+
       }
 
       renderTable(allRecords);
