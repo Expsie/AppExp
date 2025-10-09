@@ -1,7 +1,7 @@
 <script>
   const JSONBIN_CONFIG = {
-    binId: 68e75f42ae596e708f0b76b0 ,
-    apiKey: $2a$10$XgjTeUIss3ymiETPPBZyWe40nSYcmT/WCdr8I9YgMGeiONYkisT7W
+    binId: 'AQUI_TU_BIN_ID_REAL',
+    apiKey: 'AQUI_TU_MASTER_KEY_REAL'
   };
 
   let allRecords = [];
@@ -43,7 +43,7 @@
     const content = document.getElementById('content');
     content.innerHTML = '<p>Cargando registros…</p>';
 
-    if (!JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 68e75f42ae596e708f0b76b0 ) {
+    if (!JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 'YOUR_BIN_ID') {
       content.innerHTML = '<p>Falta configurar JSONBIN_CONFIG (binId/apiKey).</p>';
       return;
     }
