@@ -76,8 +76,8 @@
     // ======= CONFIG REMOTA (JSONBin) =======
     // Sustituye con tus credenciales (opcional). Si no usas JSONBin, deja el binId como 'YOUR_BIN_ID' y no fallará la UI.
     const JSONBIN_CONFIG = {
-      binId: '68e78e16d0ea881f409aeb6c'  ,
-      apiKey: '$2a$10$XgjTeUIss3ymiETPPBZyWe40nSYcmT/WCdr8I9YgMGeiONYkisT7W'
+      binId: 68e78e16d0ea881f409aeb6c  ,
+      apiKey: $2a$10$XgjTeUIss3ymiETPPBZyWe40nSYcmT/WCdr8I9YgMGeiONYkisT7W
     };
 
     // ======= UTIL =======
@@ -97,7 +97,7 @@
 
     // Guardar registro en JSONBin (append)
     async function saveRecordToJsonBin(record) {
-      if (!JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === '68e78e16d0ea881f409aeb6c0') {
+      if (!JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 68e78e16d0ea881f409aeb6c0) {
         // Sin configuración: no guardamos remoto, pero no rompemos la UI
         return;
       }
