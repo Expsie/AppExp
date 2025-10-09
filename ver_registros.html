@@ -34,54 +34,42 @@
     document.getElementById('export-registros-btn').disabled = false;
   }
 
-  async function loadRecords() {
-    document.getElementById('content').innerHTML = '<p>Cargando registros...</p>';
-
-    try {
-      const resp = await fetch(
-        `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}/latest`,
-        {
-          method: 'GET',
-          headers: {
-            'X-Master-Key': JSONBIN_CONFIG.apiKey,
-            'X-Bin-Meta': 'false' // ✅ como string
-          }
-        }
-      );
-
-      if (!resp.ok) {
-        const txt = await resp.text();
-        console.error('Error HTTP', resp.status, txt);
-        document.getElementById('content').innerHTML =
-          `<p>Error al obtener registros: ${resp.status} ${txt || resp.statusText}</p>`;
-        return;
+async function loadRecords() {
+  document.getElementById('content').innerHTML = '<p>Cargando registros...</p>';
+  try {
+    const resp = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}/latest`, {
+      method: 'GET',
+      headers: {
+        'X-Master-Key': JSONBIN_CONFIG.apiKey,
+        'X-Bin-Meta': 'false' // ojo: string, no booleano
       }
+    });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      document.getElementById('content').innerHTML = `<p>Error al obtener registros: ${resp.status} ${txt || resp.statusText}</p>`;
+      return;
+    }
 
-     const data = await resp.json();
+    const data = await resp.json();
 
-// Normalización a prueba de formatos:
-// - Si JSONBin devuelve un array directo → úsalo
-// - Si devuelve { record: [...] } → usa ese array
-// - Si devuelve otra cosa (número, objeto, etc.) → no falles
-if (Array.isArray(data)) {
-  allRecords = data;
-} else if (data && Array.isArray(data.record)) {
-  allRecords = data.record;
-} else {
-  allRecords = [];
+    // ⬇️ Aquí pegas tu bloque de normalización
+    // Normalización “a prueba de todo”
+    if (Array.isArray(data)) {
+      allRecords = data;
+    } else if (data && Array.isArray(data.record)) {
+      allRecords = data.record;
+    } else {
+      allRecords = []; // si el bin trae número, objeto, etc., no falles
+    }
+    // ⬆️ Fin del bloque
+
+    renderTable(allRecords);
+  } catch (err) {
+    console.error(err);
+    document.getElementById('content').innerHTML = '<p>Error al cargar registros.</p>';
+  }
 }
 
-renderTable(allRecords);
-
-      }
-
-      renderTable(allRecords);
-
-    } catch (err) {
-      console.error(err);
-      document.getElementById('content').innerHTML = '<p>Error al cargar registros.</p>';
-    }
-  }
 
   function applyFilters() {
     const m = document.getElementById('filter-matricula').value.trim().toLowerCase();
