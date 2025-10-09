@@ -1,8 +1,8 @@
 <script>
-  // Configuración de JSONBin: strings entre comillas
+  // ✅ Config: ambos valores como strings
   const JSONBIN_CONFIG = {
-    binId: '68e75f42ae596e708f0b76b0', // ← string
-    apiKey: '$2a$10$XgjTeUIss3ymiETPPBZyWe40nSYcmT/WCdr8I9YgMGeiONYkisT7W' // ← string
+    binId: '68e75f42ae596e708f0b76b0',
+    apiKey: '$2a$10$XgjTeUIss3ymiETPPBZyWe40nSYcmT/WCdr8I9YgMGeiONYkisT7W'
   };
 
   let allRecords = [];
@@ -15,13 +15,19 @@
     }
     let html = '<table id="tabla-registros"><thead><tr>' +
       '<th>Tienda</th><th>Matrícula</th><th>Circuito</th><th>Precinto</th><th>Fecha</th><th>SSCC</th>' +
-      '</tr></thead><tbody>';
+    '</tr></thead><tbody>';
     records.forEach(rec => {
       const fecha = rec.fecha
         ? new Date(rec.fecha).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'medium' })
         : '';
-      html += `<tr><td>${rec.tienda || ''}</td><td>${rec.matricula || ''}</td><td>${rec.circuito || ''}</td>` +
-              `<td>${rec.precinto || ''}</td><td>${fecha}</td><td>${rec.sscc || ''}</td></tr>`;
+      html += `<tr>
+        <td>${rec.tienda || ''}</td>
+        <td>${rec.matricula || ''}</td>
+        <td>${rec.circuito || ''}</td>
+        <td>${rec.precinto || ''}</td>
+        <td>${fecha}</td>
+        <td>${rec.sscc || ''}</td>
+      </tr>`;
     });
     html += '</tbody></table>';
     document.getElementById('content').innerHTML = html;
@@ -29,27 +35,31 @@
   }
 
   async function loadRecords() {
-    if (!JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === '68e75f42ae596e708f0b76b0') {
-      document.getElementById('content').innerHTML = '<p>No se ha configurado JSONBin. Por favor, configura JSONBIN_CONFIG en el código.</p>';
-      return;
-    }
     document.getElementById('content').innerHTML = '<p>Cargando registros...</p>';
+
     try {
-      const resp = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}/latest`, {
-        method: 'GET',
-        headers: {
-          'X-Master-Key': JSONBIN_CONFIG.apiKey,
-          'X-Bin-Meta': 'false' // header en string
+      const resp = await fetch(
+        `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}/latest`,
+        {
+          method: 'GET',
+          headers: {
+            'X-Master-Key': JSONBIN_CONFIG.apiKey,
+            'X-Bin-Meta': 'false' // ✅ como string
+          }
         }
-      });
+      );
+
       if (!resp.ok) {
         const txt = await resp.text();
         console.error('Error HTTP', resp.status, txt);
-        document.getElementById('content').innerHTML = `<p>Error al obtener registros: ${resp.status} ${txt || resp.statusText}</p>`;
+        document.getElementById('content').innerHTML =
+          `<p>Error al obtener registros: ${resp.status} ${txt || resp.statusText}</p>`;
         return;
       }
+
       const data = await resp.json();
-      // Soportar ambos formatos de JSONBin
+
+      // ✅ Normalización a prueba de formatos
       if (Array.isArray(data)) {
         allRecords = data;
       } else if (data && Array.isArray(data.record)) {
@@ -57,40 +67,46 @@
       } else {
         allRecords = [];
       }
+
       renderTable(allRecords);
+
     } catch (err) {
       console.error(err);
       document.getElementById('content').innerHTML = '<p>Error al cargar registros.</p>';
     }
   }
 
+  function applyFilters() {
+    const m = document.getElementById('filter-matricula').value.trim().toLowerCase();
+    const p = document.getElementById('filter-precinto').value.trim().toLowerCase();
+    const f = document.getElementById('filter-fecha').value; // yyyy-mm-dd
+
+    const filtered = allRecords.filter(rec => {
+      const okM = !m || (rec.matricula && rec.matricula.toLowerCase().includes(m));
+      const okP = !p || (rec.precinto && rec.precinto.toLowerCase().includes(p));
+      let okF = true;
+      if (f) {
+        const recDate = rec.fecha ? rec.fecha.substring(0,10) : '';
+        okF = (recDate === f);
+      }
+      return okM && okP && okF;
+    });
+
+    renderTable(filtered);
+  }
+
+  function exportCurrentTable() {
+    const table = document.getElementById('tabla-registros');
+    if (!table) return;
+    const wb = XLSX.utils.table_to_book(table, { sheet: 'Registros' });
+    XLSX.writeFile(wb, 'sscc_registros.xlsx');
+  }
+
   window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('fecha').textContent =
       new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'medium' });
     loadRecords();
-    document.getElementById('apply-filters-btn').addEventListener('click', () => {
-      const matriculaFilter = document.getElementById('filter-matricula').value.trim().toLowerCase();
-      const precintoFilter  = document.getElementById('filter-precinto').value.trim().toLowerCase();
-      const fechaFilter     = document.getElementById('filter-fecha').value;
-
-      const filtered = allRecords.filter(rec => {
-        const okM = !matriculaFilter || (rec.matricula && rec.matricula.toLowerCase().includes(matriculaFilter));
-        const okP = !precintoFilter  || (rec.precinto  && rec.precinto.toLowerCase().includes(precintoFilter));
-        let okF = true;
-        if (fechaFilter) {
-          const recDate = rec.fecha ? rec.fecha.substring(0, 10) : '';
-          okF = (recDate === fechaFilter);
-        }
-        return okM && okP && okF;
-      });
-      renderTable(filtered);
-    });
-
-    document.getElementById('export-registros-btn').addEventListener('click', () => {
-      const tableElem = document.getElementById('tabla-registros');
-      if (!tableElem) return;
-      const wb = XLSX.utils.table_to_book(tableElem, { sheet: 'Registros' });
-      XLSX.writeFile(wb, 'sscc_registros.xlsx');
-    });
+    document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
+    document.getElementById('export-registros-btn').addEventListener('click', exportCurrentTable);
   });
 </script>
