@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registros SSCC guardados</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tbody tr:nth-child(odd) {
+            background-color: #fafafa;
+        }
+    </style>
+</head>
+<body>
+    <h1>Registros de SSCC guardados</h1>
+    <!-- Mostrar la fecha y hora de generación de la página -->
+    <p>Fecha de generación: <span id="fecha"></span></p>
+    <!-- Controles de filtrado -->
+    <div id="filters" style="margin-bottom: 10px;">
+        <label>
+            Matrícula (número de camión)
+            <input type="text" id="filter-matricula" placeholder="Matrícula">
+        </label>
+        <label>
+            Precinto
+            <input type="text" id="filter-precinto" placeholder="Precinto">
+        </label>
+        <label>
+            Fecha
+            <input type="date" id="filter-fecha">
+        </label>
+        <button id="apply-filters-btn">Aplicar filtros</button>
+    </div>
+    <!-- Botón para exportar los registros filtrados a un archivo Excel -->
+    <button id="export-registros-btn" disabled>Exportar a Excel</button>
+    <div id="content">
+        <p>Cargando registros...</p>
+    </div>
+    <!-- Librería SheetJS para exportar -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <script>
+        // Configuración de JSONBin: reemplaza con tu BIN ID y API key
+        const JSONBIN_CONFIG = {
+            binId: 'YOUR_BIN_ID',     // Identificador del bin donde se almacenan los registros
+            apiKey: 'YOUR_API_KEY'    // X-Master-Key de JSONBin
+        };
+        // Almacén global de registros obtenidos
+        let allRecords = [];
+        // Renderizar la tabla de registros
+        function renderTable(records) {
+            if (!records || records.length === 0) {
+                document.getElementById('content').innerHTML = '<p>No hay registros guardados.</p>';
+                document.getElementById('export-registros-btn').disabled = true;
+                return;
+            }
+            let html = '<table id="tabla-registros"><thead><tr><th>Tienda</th><th>Matrícula</th><th>Circuito</th><th>Precinto</th><th>Fecha</th><th>SSCC</th></tr></thead><tbody>';
+            records.forEach(rec => {
+                const fecha = rec.fecha ? new Date(rec.fecha).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'medium' }) : new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'medium' });
+                html += `<tr><td>${rec.tienda || ''}</td><td>${rec.matricula || ''}</td><td>${rec.circuito || ''}</td><td>${rec.precinto || ''}</td><td>${fecha}</td><td>${rec.sscc || ''}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            document.getElementById('content').innerHTML = html;
+            document.getElementById('export-registros-btn').disabled = false;
+        }
+        // Obtener registros de JSONBin
+        async function loadRecords() {
+            if (!JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 'YOUR_BIN_ID') {
+                document.getElementById('content').innerHTML = '<p>No se ha configurado JSONBin. Por favor, configura JSONBIN_CONFIG en el código.</p>';
+                return;
+            }
+            document.getElementById('content').innerHTML = '<p>Cargando registros...</p>';
+            try {
+                const resp = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}/latest`, {
+                    method: 'GET',
+                    headers: {
+                        'X-Master-Key': JSONBIN_CONFIG.apiKey,
+                        'X-Bin-Meta': false
+                    }
+                });
+                if (!resp.ok) {
+                    document.getElementById('content').innerHTML = `<p>Error al obtener registros: ${resp.statusText}</p>`;
+                    return;
+                }
+                const data = await resp.json();
+                // Los datos pueden venir directamente como array o bajo record
+                if (Array.isArray(data)) {
+                    allRecords = data;
+                } else if (data && Array.isArray(data.record)) {
+                    allRecords = data.record;
+                } else {
+                    allRecords = [];
+                }
+                renderTable(allRecords);
+            } catch (err) {
+                document.getElementById('content').innerHTML = '<p>Error al cargar registros.</p>';
+                console.error(err);
+            }
+        }
+        // Aplicar filtros a los registros y renderizar
+        function applyFilters() {
+            const matriculaFilter = document.getElementById('filter-matricula').value.trim().toLowerCase();
+            const precintoFilter = document.getElementById('filter-precinto').value.trim().toLowerCase();
+            const fechaFilter = document.getElementById('filter-fecha').value;
+            const filtered = allRecords.filter(rec => {
+                const matchMatricula = !matriculaFilter || (rec.matricula && rec.matricula.toLowerCase().includes(matriculaFilter));
+                const matchPrecinto = !precintoFilter || (rec.precinto && rec.precinto.toLowerCase().includes(precintoFilter));
+                let matchFecha = true;
+                if (fechaFilter) {
+                    // Comparar sólo la fecha (aaaa-mm-dd) con la fecha del registro
+                    const recDate = rec.fecha ? rec.fecha.substring(0, 10) : '';
+                    matchFecha = recDate === fechaFilter;
+                }
+                return matchMatricula && matchPrecinto && matchFecha;
+            });
+            renderTable(filtered);
+        }
+        // Exportar la tabla actualmente mostrada a Excel
+        function exportCurrentTable() {
+            const tableElem = document.getElementById('tabla-registros');
+            if (!tableElem) return;
+            const workbook = XLSX.utils.table_to_book(tableElem, { sheet: 'Registros' });
+            const fileName = 'sscc_registros.xlsx';
+            XLSX.writeFile(workbook, fileName);
+        }
+        // Configurar eventos cuando el DOM esté listo
+        window.addEventListener('DOMContentLoaded', () => {
+            const fecha = new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'medium' });
+            document.getElementById('fecha').textContent = fecha;
+            // Cargar registros desde JSONBin
+            loadRecords();
+            // Asignar eventos
+            document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
+            document.getElementById('export-registros-btn').addEventListener('click', exportCurrentTable);
+        });
+    </script>
+</body>
+</html>
