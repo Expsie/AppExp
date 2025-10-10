@@ -96,40 +96,77 @@
     }
 
     // Guardar registro en JSONBin (append)
-    async function saveRecordToJsonBin(record) {
-      if (!JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId ==='68e75f42ae596e708f0b76b0') {
-        // Sin configuración: no guardamos remoto, pero no rompemos la UI
-        return;
-      }
-      const apiUrl = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
-      let currentData = [];
-      try {
-        const resp = await fetch(`${apiUrl}/latest`, {
-          method: 'GET',
-          headers: { 'X-Master-Key': JSONBIN_CONFIG.apiKey, 'X-Bin-Meta': false }
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          if (Array.isArray(data)) currentData = data;
-          else if (data && Array.isArray(data.record)) currentData = data.record;
-        }
-      } catch (e) {
-        // Si no existe o hay error, empezamos con []
-      }
-      currentData.push(record);
-      const put = await fetch(apiUrl, {
-        method: 'PUT',
+   <script>
+async function saveRecordToJsonBin(record) {
+  // 0) Validaciones básicas
+  if (!JSONBIN_CONFIG || !JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 'YOUR_BIN_ID') {
+    console.warn('[JSONBin] binId no configurado, no se guarda remoto.');
+    return;
+  }
+  if (!JSONBIN_CONFIG.apiKey || JSONBIN_CONFIG.apiKey === 'YOUR_API_KEY') {
+    console.warn('[JSONBin] apiKey no configurada, no se guarda remoto.');
+    return;
+  }
+
+  const apiUrl = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
+
+  try {
+    // 1) LEER contenido actual
+    let current = [];
+    let readStatus = 'skip';
+    try {
+      const getResp = await fetch(`${apiUrl}/latest`, {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
           'X-Master-Key': JSONBIN_CONFIG.apiKey,
-          'X-Bin-Versioning': 'false'
-        },
-        body: JSON.stringify(currentData)
+          'X-Bin-Meta': 'false' // importante: string
+        }
       });
-      if (!put.ok) {
-        console.error('PUT JSONBin falló:', await put.text());
+      readStatus = getResp.status;
+      const txt = await getResp.text();
+      // Intenta parsear; tolera array directo o {record:[]}
+      try {
+        const parsed = JSON.parse(txt);
+        if (Array.isArray(parsed)) current = parsed;
+        else if (parsed && Array.isArray(parsed.record)) current = parsed.record;
+        else current = [];
+      } catch(e) {
+        // si no es JSON válido, asumimos vacío
+        current = [];
       }
+      console.log('[JSONBin] GET latest status:', readStatus, 'items:', current.length);
+    } catch (e) {
+      console.warn('[JSONBin] GET latest falló, sigo con []:', e);
+      current = [];
     }
+
+    // 2) AÑADIR registro
+    current.push(record);
+
+    // 3) ESCRIBIR (PUT)
+    const putResp = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_CONFIG.apiKey,
+        'X-Bin-Versioning': 'false'
+      },
+      body: JSON.stringify(current)
+    });
+    const putTxt = await putResp.text();
+    if (!putResp.ok) {
+      console.error('[JSONBin] PUT error', putResp.status, putTxt);
+      alert(`Error guardando en JSONBin: ${putResp.status} ${putTxt}`);
+      return;
+    }
+    console.log('[JSONBin] PUT ok', putResp.status, putTxt);
+  } catch (err) {
+    console.error('[JSONBin] Excepción guardando:', err);
+    alert('Error guardando en JSONBin (ver consola).');
+  }
+}
+</script>
+
 
     // Añadir fila y guardar (incluye numeroFlete y fechaCreacion)
     function addRow(tienda, matricula, circuito, precinto, sscc) {
