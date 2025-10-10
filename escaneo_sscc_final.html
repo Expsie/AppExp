@@ -9,7 +9,7 @@
     h1 { text-align: center; }
     .header-inputs { display:flex; flex-wrap:wrap; gap:15px; margin-bottom:10px; }
     .header-inputs label { display:flex; flex-direction:column; font-weight:bold; }
-    .header-inputs input, .header-inputs select { padding:6px; font-size:1em; }
+    .header-inputs input { padding:6px; font-size:1em; }
     button { padding:8px 12px; font-size:1em; margin-right:10px; }
     table { width:100%; border-collapse:collapse; margin-top:20px;}
     th,td { border:1px solid #ccc; padding:8px; text-align:left;}
@@ -43,7 +43,6 @@
       SSCC manual
       <input type="text" id="sscc-manual" placeholder="Introduce SSCC manualmente">
     </label>
-    <!-- NUEVOS CAMPOS -->
     <label>
       Número de flete
       <input type="number" id="numero-flete" min="1" step="1" value="1">
@@ -77,7 +76,7 @@
 
   <script>
     // ======= CONFIG REMOTA (JSONBin) =======
-    // ⚠️ Si vas a publicar, valora NO exponer la master key o usar una clave de sólo lectura / proxy.
+    // ⚠️ Esta key es sensible. Para producción, valora ocultarla detrás de un proxy/función serverless.
     const JSONBIN_CONFIG = {
       binId: '68e75f42ae596e708f0b76b0',
       apiKey: '$2a$10$XgjTeUIss3ymiETPPBZyWe40nSYcmT/WCdr8I9YgMGeiONYkisT7W'
@@ -96,7 +95,7 @@
       dbg.textContent = '';
     }
 
-    // Rellena la fecha de creación con hoy si está vacía; devuelve el valor yyyy-mm-dd
+    // Pone hoy en fecha de creación si está vacía; devuelve yyyy-mm-dd
     function ensureFechaCreacion() {
       const fc = document.getElementById('fecha-creacion');
       if (!fc) return null;
@@ -110,74 +109,7 @@
       return fc.value;
     }
 
-    // Guardar registro en JSONBin (append)
-    async function saveRecordToJsonBin(record) {
-      if (!JSONBIN_CONFIG || !JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 'YOUR_BIN_ID') {
-        console.warn('[JSONBin] binId no configurado, no se guarda remoto.');
-        return;
-      }
-      if (!JSONBIN_CONFIG.apiKey || JSONBIN_CONFIG.apiKey === 'YOUR_API_KEY') {
-        console.warn('[JSONBin] apiKey no configurada, no se guarda remoto.');
-        return;
-      }
-
-      const apiUrl = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
-
-      try {
-        // 1) LEER contenido actual
-        let current = [];
-        let readStatus = 'skip';
-        try {
-          const getResp = await fetch(`${apiUrl}/latest`, {
-            method: 'GET',
-            headers: { 'X-Master-Key': JSONBIN_CONFIG.apiKey, 'X-Bin-Meta': 'false' }
-          });
-          readStatus = getResp.status;
-          const txt = await getResp.text();
-          try {
-            const parsed = JSON.parse(txt);
-            if (Array.isArray(parsed)) current = parsed;
-            else if (parsed && Array.isArray(parsed.record)) current = parsed.record;
-            else current = [];
-          } catch {
-            current = [];
-          }
-          console.log('[JSONBin] GET latest status:', readStatus, 'items:', current.length);
-        } catch (e) {
-          console.warn('[JSONBin] GET latest falló, sigo con []:', e);
-          current = [];
-        }
-
-        // 2) AÑADIR registro
-        current.push(record);
-
-        // 3) ESCRIBIR (PUT)
-        const putResp = await fetch(apiUrl, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Master-Key': JSONBIN_CONFIG.apiKey,
-            'X-Bin-Versioning': 'false'
-          },
-          body: JSON.stringify(current)
-        });
-        const putTxt = await putResp.text();
-        if (!putResp.ok) {
-          console.error('[JSONBin] PUT error', putResp.status, putTxt);
-          showDebug(`PUT error ${putResp.status}:\n${putTxt}`);
-          alert(`Error guardando en JSONBin: ${putResp.status}`);
-          return;
-        }
-        console.log('[JSONBin] PUT ok', putResp.status);
-        hideDebug();
-      } catch (err) {
-        console.error('[JSONBin] Excepción guardando:', err);
-        showDebug(err && err.stack ? err.stack : String(err));
-        alert('Error guardando en JSONBin (ver debug/consola).');
-      }
-    }
-
-    // Añadir fila a la tabla y guardar remoto
+    // Añadir fila a la tabla (NO guarda aún)
     function addRow(tienda, matricula, circuito, precinto, sscc) {
       const tbody = document.querySelector('#table tbody');
       const row = document.createElement('tr');
@@ -196,17 +128,7 @@
         }
       });
       tbody.appendChild(row);
-
-      // Guardado remoto con los campos añadidos
-      const numeroFlete = parseInt(document.getElementById('numero-flete').value || '1', 10);
-      const fechaCreacion = ensureFechaCreacion(); // yyyy-mm-dd
-      const record = {
-        tienda, matricula, circuito, precinto, sscc,
-        numeroFlete,
-        fechaCreacion,                        // fecha de la cabecera
-        fecha: new Date().toISOString()       // timestamp de la línea
-      };
-      saveRecordToJsonBin(record).catch(err => console.error('Error al guardar en JSONBin:', err));
+      document.getElementById('export-btn').disabled = false;
     }
 
     // Añadir SSCC manual
@@ -231,7 +153,6 @@
 
         ensureFechaCreacion();
         addRow(tiendaVal, matriculaVal, circuitoVal, precintoVal, manualCode);
-        document.getElementById('export-btn').disabled = false;
         manualField.value = '';
         manualField.focus();
       } catch (e) {
@@ -241,29 +162,126 @@
       }
     }
 
-    // Fin de captura: SIN exportar ni correo
-    function finalizarCaptura() {
-      // 1) Incrementar el número de flete
-      const nf = document.getElementById('numero-flete');
-      const actual = parseInt(nf.value || '1', 10);
-      nf.value = String(actual + 1);
+    // Recolecta todas las filas visibles de la tabla en objetos de registro
+    function collectRowsFromTable() {
+      const tienda        = document.getElementById('tienda').value.trim();
+      const matricula     = document.getElementById('matricula').value.trim();
+      const circuito      = document.getElementById('circuito').value.trim();
+      const precinto      = document.getElementById('precinto').value.trim();
+      const numeroFlete   = parseInt(document.getElementById('numero-flete').value || '1', 10);
+      const fechaCreacion = ensureFechaCreacion(); // yyyy-mm-dd
 
-      // 2) Limpiar formulario (excepto número de flete, que ya se incrementó)
-      document.getElementById('tienda').value = '';
-      document.getElementById('matricula').value = '';
-      document.getElementById('circuito').value = '';
-      document.getElementById('precinto').value = '';
-      document.getElementById('sscc-manual').value = '';
+      const rows = Array.from(document.querySelectorAll('#table tbody tr'));
+      const records = rows.map(tr => {
+        const tds = tr.querySelectorAll('td');
+        const sscc = tds[4]?.textContent?.trim() || '';
+        return {
+          tienda,
+          matricula,
+          circuito,
+          precinto,
+          sscc,
+          numeroFlete,
+          fechaCreacion,
+          fecha: new Date().toISOString()
+        };
+      });
+      return records;
+    }
 
-      // 3) Resetear fecha de creación a hoy (nueva captura) → dejamos vacío y se autocompleta
-      document.getElementById('fecha-creacion').value = '';
+    // Guarda un array de registros en JSONBin (append)
+    async function saveBatchToJsonBin(newRecords) {
+      if (!newRecords || newRecords.length === 0) return true;
 
-      // 4) Limpiar tabla
-      const tbody = document.querySelector('#table tbody');
-      tbody.innerHTML = '';
-      document.getElementById('export-btn').disabled = true;
+      if (!JSONBIN_CONFIG || !JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 'YOUR_BIN_ID') {
+        console.warn('[JSONBin] binId no configurado, no se guarda remoto.');
+        return false;
+      }
+      if (!JSONBIN_CONFIG.apiKey || JSONBIN_CONFIG.apiKey === 'YOUR_API_KEY') {
+        console.warn('[JSONBin] apiKey no configurada, no se guarda remoto.');
+        return false;
+      }
 
-      hideDebug();
+      const apiUrl = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
+      let current = [];
+
+      // 1) Lee el contenido actual
+      try {
+        const getResp = await fetch(`${apiUrl}/latest`, {
+          method: 'GET',
+          headers: { 'X-Master-Key': JSONBIN_CONFIG.apiKey, 'X-Bin-Meta': 'false' }
+        });
+        const txt = await getResp.text();
+        try {
+          const parsed = JSON.parse(txt);
+          if (Array.isArray(parsed)) current = parsed;
+          else if (parsed && Array.isArray(parsed.record)) current = parsed.record;
+          else current = [];
+        } catch { current = []; }
+      } catch (e) {
+        console.warn('[JSONBin] GET latest falló, asumimos []. Detalle:', e);
+        current = [];
+      }
+
+      // 2) Añade los nuevos registros al final
+      current = current.concat(newRecords);
+
+      // 3) PUT (sobrescribe con el array actualizado)
+      const putResp = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': JSONBIN_CONFIG.apiKey,
+          'X-Bin-Versioning': 'false'
+        },
+        body: JSON.stringify(current)
+      });
+      if (!putResp.ok) {
+        const errTxt = await putResp.text();
+        console.error('[JSONBin] PUT error', putResp.status, errTxt);
+        showDebug(`PUT error ${putResp.status}:\n${errTxt}`);
+        alert(`Error guardando en JSONBin: ${putResp.status}`);
+        return false;
+      }
+      return true;
+    }
+
+    // Fin de captura: guarda en bloque + limpia + aumenta flete
+    async function finalizarCaptura() {
+      try {
+        const records = collectRowsFromTable();
+
+        // Si hay filas, guardar en JSONBin
+        if (records.length > 0) {
+          const ok = await saveBatchToJsonBin(records);
+          if (!ok) return; // no limpiar si falló el guardado
+        }
+
+        // Incrementa Nº de flete
+        const nf = document.getElementById('numero-flete');
+        const actual = parseInt(nf.value || '1', 10);
+        nf.value = String(actual + 1);
+
+        // Limpia cabecera (menos el Nº de flete, ya incrementado)
+        document.getElementById('tienda').value = '';
+        document.getElementById('matricula').value = '';
+        document.getElementById('circuito').value = '';
+        document.getElementById('precinto').value = '';
+        document.getElementById('sscc-manual').value = '';
+        document.getElementById('fecha-creacion').value = '';
+
+        // Limpia tabla
+        const tbody = document.querySelector('#table tbody');
+        tbody.innerHTML = '';
+        document.getElementById('export-btn').disabled = true;
+
+        hideDebug();
+        // alert('Captura guardada y formulario reiniciado.');
+      } catch (e) {
+        console.error('Error en finalizarCaptura:', e);
+        showDebug(e && e.stack ? e.stack : String(e));
+        alert('Error en Fin de captura (ver debug/consola).');
+      }
     }
 
     // Al cargar la página
