@@ -1,107 +1,180 @@
-<script>
-  // ✅ Config: ambos valores como strings
-  const JSONBIN_CONFIG = {
-    binId: 68e75f42ae596e708f0b76b0,
-    apiKey: $2a$10$XgjTeUIss3ymiETPPBZyWe40nSYcmT/WCdr8I9YgMGeiONYkisT7W
-  };
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Registros SSCC guardados</title>
+  <style>
+    body{font-family:Arial,sans-serif;margin:20px;}
+    h1{text-align:center;}
+    table{width:100%;border-collapse:collapse;margin-top:20px;}
+    th,td{border:1px solid #ccc;padding:8px;text-align:left;}
+    th{background:#f2f2f2;}
+    tbody tr:nth-child(odd){background:#fafafa;}
+    #filters{margin-bottom:10px;}
+    #filters label{display:inline-flex;flex-direction:column;margin-right:12px;font-weight:bold;}
+    #debug{white-space:pre-wrap;background:#fff3cd;border:1px solid #ffeeba;padding:10px;margin-top:12px;display:none}
+  </style>
+</head>
+<body>
+  <h1>Registros de SSCC guardados</h1>
 
-  let allRecords = [];
+  <p>Fecha de generación: <span id="fecha"></span></p>
 
-  function renderTable(records) {
-    if (!records || records.length === 0) {
-      document.getElementById('content').innerHTML = '<p>No hay registros guardados.</p>';
-      document.getElementById('export-registros-btn').disabled = true;
-      return;
+  <div id="filters">
+    <label>
+      Matrícula (número de camión)
+      <input type="text" id="filter-matricula" placeholder="Matrícula">
+    </label>
+    <label>
+      Precinto
+      <input type="text" id="filter-precinto" placeholder="Precinto">
+    </label>
+    <label>
+      Fecha (línea)
+      <input type="date" id="filter-fecha">
+    </label>
+    <button id="apply-filters-btn">Aplicar filtros</button>
+  </div>
+
+  <button id="export-registros-btn" disabled>Exportar a Excel</button>
+
+  <div id="content"><p>Cargando registros…</p></div>
+  <pre id="debug"></pre>
+
+  <!-- SheetJS para exportar -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js" defer></script>
+
+  <script>
+    // ✅ Config: como STRINGS
+    const JSONBIN_CONFIG = {
+      binId: '68e75f42ae596e708f0b76b0',
+      apiKey: '$2a$10$XgjTeUIss3ymiETPPBZyWe40nSYcmT/WCdr8I9YgMGeiONYkisT7W'
+    };
+
+    let allRecords = [];
+
+    function formatFechaISOtoLocal(iso) {
+      try { return new Date(iso).toLocaleString('es-ES',{dateStyle:'short', timeStyle:'medium'}); }
+      catch { return iso || ''; }
     }
-    let html = '<table id="tabla-registros"><thead><tr>' +
-      '<th>Tienda</th><th>Matrícula</th><th>Circuito</th><th>Precinto</th><th>Fecha</th><th>SSCC</th>' +
-    '</tr></thead><tbody>';
-    records.forEach(rec => {
-      const fecha = rec.fecha
-        ? new Date(rec.fecha).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'medium' })
-        : '';
-      html += `<tr>
-        <td>${rec.tienda || ''}</td>
-        <td>${rec.matricula || ''}</td>
-        <td>${rec.circuito || ''}</td>
-        <td>${rec.precinto || ''}</td>
-        <td>${fecha}</td>
-        <td>${rec.sscc || ''}</td>
-      </tr>`;
-    });
-    html += '</tbody></table>';
-    document.getElementById('content').innerHTML = html;
-    document.getElementById('export-registros-btn').disabled = false;
-  }
 
-async function loadRecords() {
-  document.getElementById('content').innerHTML = '<p>Cargando registros...</p>';
-  try {
-    const resp = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}/latest`, {
-      method: 'GET',
-      headers: {
-        'X-Master-Key': JSONBIN_CONFIG.apiKey,
-        'X-Bin-Meta': 'false' // ojo: string, no booleano
+    function renderTable(records) {
+      const content = document.getElementById('content');
+      if (!records || records.length === 0) {
+        content.innerHTML = '<p>No hay registros guardados.</p>';
+        document.getElementById('export-registros-btn').disabled = true;
+        return;
       }
-    });
-    if (!resp.ok) {
-      const txt = await resp.text();
-      document.getElementById('content').innerHTML = `<p>Error al obtener registros: ${resp.status} ${txt || resp.statusText}</p>`;
-      return;
+      let html = '<table id="tabla-registros"><thead><tr>' +
+        '<th>Tienda</th><th>Matrícula</th><th>Circuito</th><th>Precinto</th>' +
+        '<th>Nº flete</th><th>Fecha creación</th><th>Fecha (línea)</th><th>SSCC</th>' +
+      '</tr></thead><tbody>';
+      records.forEach(rec=>{
+        html += `<tr>
+          <td>${rec.tienda ?? ''}</td>
+          <td>${rec.matricula ?? ''}</td>
+          <td>${rec.circuito ?? ''}</td>
+          <td>${rec.precinto ?? ''}</td>
+          <td>${rec.numeroFlete ?? ''}</td>
+          <td>${rec.fechaCreacion ?? ''}</td>
+          <td>${rec.fecha ? formatFechaISOtoLocal(rec.fecha) : ''}</td>
+          <td>${rec.sscc ?? ''}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      content.innerHTML = html;
+      document.getElementById('export-registros-btn').disabled = false;
     }
 
-    const data = await resp.json();
-
-    // ⬇️ Aquí pegas tu bloque de normalización
-    // Normalización “a prueba de todo”
-    if (Array.isArray(data)) {
-      allRecords = data;
-    } else if (data && Array.isArray(data.record)) {
-      allRecords = data.record;
-    } else {
-      allRecords = []; // si el bin trae número, objeto, etc., no falles
+    function showDebug(msg) {
+      const dbg = document.getElementById('debug');
+      dbg.textContent = String(msg);
+      dbg.style.display = 'block';
     }
-    // ⬆️ Fin del bloque
 
-    renderTable(allRecords);
-  } catch (err) {
-    console.error(err);
-    document.getElementById('content').innerHTML = '<p>Error al cargar registros.</p>';
-  }
-}
+    async function loadRecords() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<p>Cargando registros...</p>';
+      document.getElementById('debug').style.display = 'none';
 
+      try {
+        const url = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}/latest`;
+        const resp = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'X-Master-Key': JSONBIN_CONFIG.apiKey,
+            'X-Bin-Meta': 'false' // ✅ string
+          }
+        });
 
-  function applyFilters() {
-    const m = document.getElementById('filter-matricula').value.trim().toLowerCase();
-    const p = document.getElementById('filter-precinto').value.trim().toLowerCase();
-    const f = document.getElementById('filter-fecha').value; // yyyy-mm-dd
+        if (!resp.ok) {
+          const txt = await resp.text();
+          content.innerHTML = `<p>Error al obtener registros: ${resp.status} ${resp.statusText}</p>`;
+          showDebug(`Respuesta del servidor:\n${txt}`);
+          return;
+        }
 
-    const filtered = allRecords.filter(rec => {
-      const okM = !m || (rec.matricula && rec.matricula.toLowerCase().includes(m));
-      const okP = !p || (rec.precinto && rec.precinto.toLowerCase().includes(p));
-      let okF = true;
-      if (f) {
-        const recDate = rec.fecha ? rec.fecha.substring(0,10) : '';
-        okF = (recDate === f);
+        let data;
+        try {
+          data = await resp.json();
+        } catch (e) {
+          content.innerHTML = '<p>Error al parsear JSON.</p>';
+          showDebug(`JSON inválido:\n${await resp.text()}`);
+          return;
+        }
+
+        // ✅ Normalización (array directo o {record: []})
+        if (Array.isArray(data)) {
+          allRecords = data;
+        } else if (data && Array.isArray(data.record)) {
+          allRecords = data.record;
+        } else {
+          allRecords = [];
+          showDebug(`Formato inesperado:\n${JSON.stringify(data, null, 2)}`);
+        }
+
+        renderTable(allRecords);
+
+      } catch (err) {
+        console.error(err);
+        content.innerHTML = '<p>Error al cargar registros.</p>';
+        showDebug(err && err.stack ? err.stack : String(err));
       }
-      return okM && okP && okF;
+    }
+
+    function applyFilters() {
+      const m = document.getElementById('filter-matricula').value.trim().toLowerCase();
+      const p = document.getElementById('filter-precinto').value.trim().toLowerCase();
+      const f = document.getElementById('filter-fecha').value; // yyyy-mm-dd
+
+      const filtered = allRecords.filter(rec=>{
+        const okM = !m || (rec.matricula && rec.matricula.toLowerCase().includes(m));
+        const okP = !p || (rec.precinto && rec.precinto.toLowerCase().includes(p));
+        let okF = true;
+        if (f) {
+          const d = rec.fecha ? rec.fecha.substring(0,10) : '';
+          okF = (d === f);
+        }
+        return okM && okP && okF;
+      });
+      renderTable(filtered);
+    }
+
+    function exportCurrentTable(){
+      const tableElem = document.getElementById('tabla-registros');
+      if (!tableElem) return;
+      const wb = XLSX.utils.table_to_book(tableElem,{sheet:'Registros'});
+      XLSX.writeFile(wb,'sscc_registros.xlsx');
+    }
+
+    window.addEventListener('DOMContentLoaded', ()=>{
+      document.getElementById('fecha').textContent =
+        new Date().toLocaleString('es-ES',{dateStyle:'short', timeStyle:'medium'});
+      loadRecords();
+      document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
+      document.getElementById('export-registros-btn').addEventListener('click', exportCurrentTable);
     });
-
-    renderTable(filtered);
-  }
-
-  function exportCurrentTable() {
-    const table = document.getElementById('tabla-registros');
-    if (!table) return;
-    const wb = XLSX.utils.table_to_book(table, { sheet: 'Registros' });
-    XLSX.writeFile(wb, 'sscc_registros.xlsx');
-  }
-
-  window.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('fecha').textContent =
-      new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'medium' });
-    loadRecords();
-    document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
-    document.getElementById('export-registros-btn').addEventListener('click', exportCurrentTable);
-  });
-</script>
+  </script>
+</body>
+</html>
