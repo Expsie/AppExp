@@ -15,6 +15,7 @@
     th,td { border:1px solid #ccc; padding:8px; text-align:left;}
     th { background:#f2f2f2;}
     tbody tr:nth-child(odd){ background:#fafafa;}
+    #debug{white-space:pre-wrap;background:#fff3cd;border:1px solid #ffeeba;padding:10px;margin-top:12px;display:none}
   </style>
 </head>
 <body>
@@ -32,7 +33,7 @@
     </label>
     <label>
       Circuito
-      <input type="text" id="circuito" placeholder="Circuito o ruta">
+      <input type="text" id="circuito" placeholder="Transporte / Retirada ...">
     </label>
     <label>
       Precinto
@@ -72,15 +73,29 @@
     <tbody></tbody>
   </table>
 
+  <pre id="debug"></pre>
+
   <script>
     // ======= CONFIG REMOTA (JSONBin) =======
-    // Sustituye con tus credenciales (opcional). Si no usas JSONBin, deja el binId como 'YOUR_BIN_ID' y no fallará la UI.
+    // ⚠️ Si vas a publicar, valora NO exponer la master key o usar una clave de sólo lectura / proxy.
     const JSONBIN_CONFIG = {
       binId: '68e75f42ae596e708f0b76b0',
       apiKey: '$2a$10$XgjTeUIss3ymiETPPBZyWe40nSYcmT/WCdr8I9YgMGeiONYkisT7W'
+      // binId: 'YOUR_BIN_ID', apiKey: 'YOUR_API_KEY'
     };
 
     // ======= UTIL =======
+    function showDebug(msg) {
+      const dbg = document.getElementById('debug');
+      dbg.textContent = String(msg);
+      dbg.style.display = 'block';
+    }
+    function hideDebug() {
+      const dbg = document.getElementById('debug');
+      dbg.style.display = 'none';
+      dbg.textContent = '';
+    }
+
     // Rellena la fecha de creación con hoy si está vacía; devuelve el valor yyyy-mm-dd
     function ensureFechaCreacion() {
       const fc = document.getElementById('fecha-creacion');
@@ -96,80 +111,73 @@
     }
 
     // Guardar registro en JSONBin (append)
-   <script>
-async function saveRecordToJsonBin(record) {
-  // 0) Validaciones básicas
-  if (!JSONBIN_CONFIG || !JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 'YOUR_BIN_ID') {
-    console.warn('[JSONBin] binId no configurado, no se guarda remoto.');
-    return;
-  }
-  if (!JSONBIN_CONFIG.apiKey || JSONBIN_CONFIG.apiKey === 'YOUR_API_KEY') {
-    console.warn('[JSONBin] apiKey no configurada, no se guarda remoto.');
-    return;
-  }
-
-  const apiUrl = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
-
-  try {
-    // 1) LEER contenido actual
-    let current = [];
-    let readStatus = 'skip';
-    try {
-      const getResp = await fetch(`${apiUrl}/latest`, {
-        method: 'GET',
-        headers: {
-          'X-Master-Key': JSONBIN_CONFIG.apiKey,
-          'X-Bin-Meta': 'false' // importante: string
-        }
-      });
-      readStatus = getResp.status;
-      const txt = await getResp.text();
-      // Intenta parsear; tolera array directo o {record:[]}
-      try {
-        const parsed = JSON.parse(txt);
-        if (Array.isArray(parsed)) current = parsed;
-        else if (parsed && Array.isArray(parsed.record)) current = parsed.record;
-        else current = [];
-      } catch(e) {
-        // si no es JSON válido, asumimos vacío
-        current = [];
+    async function saveRecordToJsonBin(record) {
+      if (!JSONBIN_CONFIG || !JSONBIN_CONFIG.binId || JSONBIN_CONFIG.binId === 'YOUR_BIN_ID') {
+        console.warn('[JSONBin] binId no configurado, no se guarda remoto.');
+        return;
       }
-      console.log('[JSONBin] GET latest status:', readStatus, 'items:', current.length);
-    } catch (e) {
-      console.warn('[JSONBin] GET latest falló, sigo con []:', e);
-      current = [];
+      if (!JSONBIN_CONFIG.apiKey || JSONBIN_CONFIG.apiKey === 'YOUR_API_KEY') {
+        console.warn('[JSONBin] apiKey no configurada, no se guarda remoto.');
+        return;
+      }
+
+      const apiUrl = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
+
+      try {
+        // 1) LEER contenido actual
+        let current = [];
+        let readStatus = 'skip';
+        try {
+          const getResp = await fetch(`${apiUrl}/latest`, {
+            method: 'GET',
+            headers: { 'X-Master-Key': JSONBIN_CONFIG.apiKey, 'X-Bin-Meta': 'false' }
+          });
+          readStatus = getResp.status;
+          const txt = await getResp.text();
+          try {
+            const parsed = JSON.parse(txt);
+            if (Array.isArray(parsed)) current = parsed;
+            else if (parsed && Array.isArray(parsed.record)) current = parsed.record;
+            else current = [];
+          } catch {
+            current = [];
+          }
+          console.log('[JSONBin] GET latest status:', readStatus, 'items:', current.length);
+        } catch (e) {
+          console.warn('[JSONBin] GET latest falló, sigo con []:', e);
+          current = [];
+        }
+
+        // 2) AÑADIR registro
+        current.push(record);
+
+        // 3) ESCRIBIR (PUT)
+        const putResp = await fetch(apiUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Master-Key': JSONBIN_CONFIG.apiKey,
+            'X-Bin-Versioning': 'false'
+          },
+          body: JSON.stringify(current)
+        });
+        const putTxt = await putResp.text();
+        if (!putResp.ok) {
+          console.error('[JSONBin] PUT error', putResp.status, putTxt);
+          showDebug(`PUT error ${putResp.status}:\n${putTxt}`);
+          alert(`Error guardando en JSONBin: ${putResp.status}`);
+          return;
+        }
+        console.log('[JSONBin] PUT ok', putResp.status);
+        hideDebug();
+      } catch (err) {
+        console.error('[JSONBin] Excepción guardando:', err);
+        showDebug(err && err.stack ? err.stack : String(err));
+        alert('Error guardando en JSONBin (ver debug/consola).');
+      }
     }
 
-    // 2) AÑADIR registro
-    current.push(record);
-
-    // 3) ESCRIBIR (PUT)
-    const putResp = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Master-Key': JSONBIN_CONFIG.apiKey,
-        'X-Bin-Versioning': 'false'
-      },
-      body: JSON.stringify(current)
-    });
-    const putTxt = await putResp.text();
-    if (!putResp.ok) {
-      console.error('[JSONBin] PUT error', putResp.status, putTxt);
-      alert(`Error guardando en JSONBin: ${putResp.status} ${putTxt}`);
-      return;
-    }
-    console.log('[JSONBin] PUT ok', putResp.status, putTxt);
-  } catch (err) {
-    console.error('[JSONBin] Excepción guardando:', err);
-    alert('Error guardando en JSONBin (ver consola).');
-  }
-}
-    
-
-
-
-    // Añadir fila y guardar (incluye numeroFlete y fechaCreacion)
+    // Añadir fila a la tabla y guardar remoto
     function addRow(tienda, matricula, circuito, precinto, sscc) {
       const tbody = document.querySelector('#table tbody');
       const row = document.createElement('tr');
@@ -189,7 +197,7 @@ async function saveRecordToJsonBin(record) {
       });
       tbody.appendChild(row);
 
-      // Guardado remoto
+      // Guardado remoto con los campos añadidos
       const numeroFlete = parseInt(document.getElementById('numero-flete').value || '1', 10);
       const fechaCreacion = ensureFechaCreacion(); // yyyy-mm-dd
       const record = {
@@ -228,7 +236,8 @@ async function saveRecordToJsonBin(record) {
         manualField.focus();
       } catch (e) {
         console.error('Error en addManual:', e);
-        alert('Ocurrió un error al añadir el SSCC. Revisa la consola (F12).');
+        showDebug(e && e.stack ? e.stack : String(e));
+        alert('Ocurrió un error al añadir el SSCC. Revisa el recuadro “debug” o la consola (F12).');
       }
     }
 
@@ -246,21 +255,26 @@ async function saveRecordToJsonBin(record) {
       document.getElementById('precinto').value = '';
       document.getElementById('sscc-manual').value = '';
 
-      // 3) Resetear fecha de creación a hoy (nueva captura)
+      // 3) Resetear fecha de creación a hoy (nueva captura) → dejamos vacío y se autocompleta
       document.getElementById('fecha-creacion').value = '';
 
       // 4) Limpiar tabla
       const tbody = document.querySelector('#table tbody');
       tbody.innerHTML = '';
       document.getElementById('export-btn').disabled = true;
+
+      hideDebug();
     }
 
     // Al cargar la página
     window.addEventListener('DOMContentLoaded', () => {
       ensureFechaCreacion();
+
+      // Click botón
       const addBtn = document.getElementById('add-manual-btn');
       if (addBtn) addBtn.addEventListener('click', addManual);
 
+      // Enter en input SSCC
       const ssccInput = document.getElementById('sscc-manual');
       if (ssccInput) {
         ssccInput.addEventListener('keydown', (ev) => {
