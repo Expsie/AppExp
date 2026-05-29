@@ -99,8 +99,11 @@
 
         // Configuración de JSONBin para almacenar datos en la nube
         const JSONBIN_CONFIG = {
+            // Identificador del contenedor donde se guardan los datos
             binId: '68e75f42ae596e708f0b76b0',
-            apiKey: '$2a$10$XgjTeUIss3ymiETPPBZyWe40nSYcmT/WCdr8I9YgMGeiONYkisT7W'
+            // Claves actualizadas proporcionadas por el usuario. masterKey y accessKey
+            masterKey: '$2a$10$EAIHx3onTDxlqZkPRHKSiunmhJpEgtrqv8OCHwrG/gOyXp6eNNu.S',
+            accessKey: '$2a$10$DCiKL4ue44Wt2C8N1bZ35umFj.KvbtFDrC2cZb4l66wQAgoFDqYM6'
         };
 
         /**
@@ -115,7 +118,9 @@
                 const response = await fetch(url, {
                     method: 'GET',
                     headers: {
-                        'X-Master-Key': JSONBIN_CONFIG.apiKey
+                        'X-Master-Key': JSONBIN_CONFIG.masterKey,
+                        'X-Access-Key': JSONBIN_CONFIG.accessKey,
+                        'X-Bin-Meta': 'false'
                     }
                 });
                 if (!response.ok) throw new Error('Error al obtener datos remotos');
@@ -138,7 +143,8 @@
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Master-Key': JSONBIN_CONFIG.apiKey,
+                        'X-Master-Key': JSONBIN_CONFIG.masterKey,
+                        'X-Access-Key': JSONBIN_CONFIG.accessKey,
                         'X-Bin-Versioning': 'false'
                     },
                     body: JSON.stringify(data)
