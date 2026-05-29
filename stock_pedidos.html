@@ -64,6 +64,10 @@
         <h2>Importar stock (Tabla1Stock)</h2>
         <p>Selecciona un archivo Excel con las columnas: <strong>referencia</strong>, <strong>designacion</strong>, <strong>seccion</strong>, <strong>stockDisponible</strong>, <strong>ubicaciones</strong> y <strong>tienda</strong>. Cada fila representará un artículo específico de una tienda concreta.</p>
         <input type="file" id="import-stock" accept=".xlsx,.xls" />
+        <div style="margin-top:5px;">
+            <label for="stock-url">URL del archivo en Drive (opcional)</label>
+            <input type="url" id="stock-url" placeholder="https://drive.google.com/…" style="width:100%;max-width:300px;" />
+        </div>
         <button type="button" id="import-btn">Importar stock</button>
         <span id="import-status"></span>
     </div>
@@ -138,8 +142,11 @@
         // constantes si cambias de bin o de clave. El usuario ha proporcionado
         // estos valores para conectar con la base de datos remota.
         const JSONBIN_CONFIG = {
+            // Identificador del contenedor donde se guardan los datos
             binId: '68e75f42ae596e708f0b76b0',
-            apiKey: '$2a$10$XgjTeUIss3ymiETPPBZyWe40nSYcmT/WCdr8I9YgMGeiONYkisT7W'
+            // Claves actualizadas proporcionadas por el usuario. masterKey y accessKey
+            masterKey: '$2a$10$EAIHx3onTDxlqZkPRHKSiunmhJpEgtrqv8OCHwrG/gOyXp6eNNu.S',
+            accessKey: '$2a$10$DCiKL4ue44Wt2C8N1bZ35umFj.KvbtFDrC2cZb4l66wQAgoFDqYM6'
         };
 
         /**
@@ -154,7 +161,9 @@
                 const response = await fetch(url, {
                     method: 'GET',
                     headers: {
-                        'X-Master-Key': JSONBIN_CONFIG.apiKey
+                        'X-Master-Key': JSONBIN_CONFIG.masterKey,
+                        'X-Access-Key': JSONBIN_CONFIG.accessKey,
+                        'X-Bin-Meta': 'false'
                     }
                 });
                 if (!response.ok) throw new Error('Error al obtener datos remotos');
@@ -177,7 +186,8 @@
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Master-Key': JSONBIN_CONFIG.apiKey,
+                        'X-Master-Key': JSONBIN_CONFIG.masterKey,
+                        'X-Access-Key': JSONBIN_CONFIG.accessKey,
                         'X-Bin-Versioning': 'false'
                     },
                     body: JSON.stringify(data)
@@ -210,15 +220,50 @@
             }
         }
 
-        // Función para importar stock desde un archivo Excel
-        async function importarStock(file) {
+        // Función para extraer el ID de un enlace de Google Drive. Devuelve null si no se encuentra.
+        function extractDriveFileId(url) {
+            const match1 = url.match(/\/file\/d\/([^/]+)\/|\/uc\?id=([^&]+)/);
+            if (match1) return match1[1] || match1[2];
+            const match2 = url.match(/[?&]id=([^&]+)/);
+            if (match2) return match2[1];
+            return null;
+        }
+
+        // Función para importar stock desde un archivo local o una URL de Drive
+        async function importarStock() {
             const importStatus = document.getElementById('import-status');
-            if (!file) {
-                importStatus.textContent = 'Selecciona un archivo.';
+            const fileInput = document.getElementById('import-stock');
+            const urlInput = document.getElementById('stock-url');
+            let arrayBuffer;
+            importStatus.textContent = '';
+            if (fileInput.files && fileInput.files.length > 0) {
+                // Leer archivo local
+                const file = fileInput.files[0];
+                arrayBuffer = await file.arrayBuffer();
+            } else if (urlInput.value.trim()) {
+                // Descargar archivo desde URL
+                let url = urlInput.value.trim();
+                // Si es un enlace de Google Drive, transformarlo al formato de descarga directa
+                if (url.includes('drive.google.com')) {
+                    const fileId = extractDriveFileId(url);
+                    if (fileId) {
+                        url = `https://drive.google.com/uc?export=download&id=${fileId}`;
+                    }
+                }
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error();
+                    arrayBuffer = await response.arrayBuffer();
+                } catch (err) {
+                    console.error(err);
+                    importStatus.textContent = 'Error al descargar el archivo desde la URL.';
+                    return;
+                }
+            } else {
+                importStatus.textContent = 'Selecciona un archivo o introduce una URL.';
                 return;
             }
             try {
-                const arrayBuffer = await file.arrayBuffer();
                 const workbook = XLSX.read(arrayBuffer, { type: 'array' });
                 const sheetName = workbook.SheetNames[0];
                 const sheet = workbook.Sheets[sheetName];
@@ -403,10 +448,10 @@
             // Cargar datos desde la base remota antes de inicializar los eventos
             initializeFromRemote().then(() => {
                 // Asignar eventos a los botones una vez que se han sincronizado los datos
-                document.getElementById('import-btn').addEventListener('click', () => {
-                    const fileInput = document.getElementById('import-stock');
-                    importarStock(fileInput.files[0]);
-                });
+                // Asignamos directamente la función importarStock como manejador del botón de importación.
+                // La función se encarga de leer tanto el archivo local como la URL suministrada,
+                // por lo que no es necesario pasar ningún parámetro.
+                document.getElementById('import-btn').addEventListener('click', importarStock);
                 document.getElementById('add-line-btn').addEventListener('click', addLine);
                 document.getElementById('finalize-btn').addEventListener('click', finalizarPedido);
                 document.getElementById('view-orders-btn').addEventListener('click', viewOrders);
