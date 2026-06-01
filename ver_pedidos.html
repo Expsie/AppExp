@@ -416,6 +416,30 @@
             initializeFromRemote().then(() => {
                 // Cargar y renderizar pedidos utilizando los filtros actuales al inicio
                 applyFilters();
+                // Establecer un temporizador para refrescar datos periódicamente
+                const REFRESH_INTERVAL_MS = 600000; // 10 minutos
+                setInterval(async () => {
+                    try {
+                        const remoteData = await fetchRemoteData();
+                        let updated = false;
+                        if (remoteData && remoteData.tabla1stock) {
+                            await db.tabla1stock.clear();
+                            await db.tabla1stock.bulkAdd(remoteData.tabla1stock);
+                            updated = true;
+                        }
+                        if (remoteData && remoteData.tabla2Pedidos) {
+                            await db.tabla2Pedidos.clear();
+                            await db.tabla2Pedidos.bulkAdd(remoteData.tabla2Pedidos);
+                            updated = true;
+                        }
+                        // Si hubo actualización, volver a aplicar filtros para refrescar la tabla
+                        if (updated) {
+                            applyFilters();
+                        }
+                    } catch (err) {
+                        console.error('Error al actualizar datos desde la nube:', err);
+                    }
+                }, REFRESH_INTERVAL_MS);
             });
             // Asociar eventos a botones de filtro y exportación
             document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
