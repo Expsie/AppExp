@@ -3,44 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pedidos guardados</title>
+    <title>Pedidos guardados - Supabase</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        h1 {
-            text-align: center;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        th, td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-        tbody tr:nth-child(odd) {
-            background-color: #fafafa;
-        }
-        button {
-            margin-right: 5px;
-            padding: 6px 10px;
-        }
-        .details {
-            margin: 10px 0;
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        tbody tr:nth-child(odd) { background-color: #fafafa; }
+        button { margin-right: 5px; margin-bottom: 5px; padding: 6px 10px; }
+        input, select { padding: 6px; margin-bottom: 10px; box-sizing: border-box; }
+        code { background: #f5f5f5; padding: 2px 4px; border-radius: 4px; }
+        .details { margin: 10px 0; }
+        .status { display: inline-block; margin-left: 8px; font-weight: bold; }
+        .muted { color: #666; font-size: 0.95em; }
+        .error { color: #a40000; }
+        .ok { color: #0a6b12; }
     </style>
 </head>
 <body>
     <h1>Pedidos guardados</h1>
-    <p>A continuación se muestran los pedidos registrados en la base de datos.</p>
-    <!-- Sección de filtros -->
+    <p>A continuación se muestran los pedidos registrados en Supabase, tabla <code>PedidoMutuOfline</code>.</p>
+
+    <div id="supabase-section" style="margin: 10px 0 20px 0;">
+        <p class="muted">Conexión con Supabase configurada. La publishable key no se muestra en pantalla.</p>
+        <button type="button" id="refresh-orders-btn">Actualizar ahora</button>
+        <span id="supabase-status" class="status"></span>
+    </div>
+
+    <div id="import-section" style="margin: 10px 0 20px 0;">
+        <h2>Actualizar stock en Supabase</h2>
+        <p>Selecciona un Excel con la misma estructura que la tabla <code>StockDispo</code>: <strong>Tienda</strong>, <strong>Address</strong>, <strong>SSCC</strong>, <strong>Product Code</strong>, <strong>EAN code</strong>, <strong>Product name</strong>, <strong>Department</strong> y <strong>Qty</strong>.</p>
+        <p class="muted"><strong>Importante:</strong> al importar se reemplaza el contenido actual de la tabla <code>StockDispo</code>.</p>
+        <input type="file" id="import-stock" accept=".xlsx,.xls" style="width:100%;max-width:420px;" />
+        <div style="margin-top:5px;">
+            <label for="stock-url">URL del archivo en Drive (opcional)</label><br>
+            <input type="url" id="stock-url" placeholder="https://drive.google.com/…" style="width:100%;max-width:420px;" />
+        </div>
+        <button type="button" id="import-btn">Importar stock a Supabase</button>
+        <span id="import-status" class="status"></span>
+    </div>
+
     <div id="filter-section" style="margin: 10px 0;">
         <label for="filter-tienda">Tienda:</label>
         <select id="filter-tienda" style="margin-right:10px;">
@@ -62,138 +65,361 @@
         <button type="button" id="apply-filters-btn">Aplicar filtros</button>
         <button type="button" id="export-filtered-btn">Exportar filtrados a Excel</button>
     </div>
+
     <table id="orders-table">
         <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>LDAP</th>
-                    <th>Tienda</th>
-                    <th>CC</th>
-                    <th>Circuito</th>
-                    <th>Fecha</th>
-                    <th>Impreso</th>
-                    <th>Preparado</th>
-                    <th>Acciones</th>
-                </tr>
+            <tr>
+                <th>ID</th>
+                <th>LDAP</th>
+                <th>Tienda</th>
+                <th>CC</th>
+                <th>Circuito</th>
+                <th>Fecha</th>
+                <th>Impreso</th>
+                <th>Preparado</th>
+                <th>Acciones</th>
+            </tr>
         </thead>
         <tbody></tbody>
     </table>
-    <!-- Librerías -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
-    <script src="https://unpkg.com/dexie@3.0.3/dist/dexie.min.js"></script>
-    <script>
-        const db = new Dexie('stockDB');
-        /*
-         * Actualizamos la base de datos a la versión 3 para añadir los campos
-         * "impreso" y "preparado" a la tabla2Pedidos. Esto permitirá marcar
-         * si un pedido ya ha sido impreso/exportado y si está preparado y
-         * ubicado. Es importante que las demás páginas (por ejemplo,
-         * stock_pedidos.html) utilicen la misma versión y esquema para
-         * evitar errores de incompatibilidad de Dexie.
-         */
-        db.version(3).stores({
-            tabla1stock: '++id, referencia, tienda, designacion, seccion, stockDisponible, ubicaciones',
-            // Añadimos impreso y preparado como campos no indexados para cada pedido
-            tabla2Pedidos: '++id, ldap, tienda, cc, circuito, fecha, lineas, impreso, preparado'
-        });
 
-        // Configuración de JSONBin para almacenar datos en la nube
-        const JSONBIN_CONFIG = {
-            // Identificador del contenedor donde se guardan los datos
-            binId: '68e75f42ae596e708f0b76b0',
-            // Claves actualizadas proporcionadas por el usuario. masterKey y accessKey
-            masterKey: '$2a$10$EAIHx3onTDxlqZkPRHKSiunmhJpEgtrqv8OCHwrG/gOyXp6eNNu.S',
-            accessKey: '$2a$10$DCiKL4ue44Wt2C8N1bZ35umFj.KvbtFDrC2cZb4l66wQAgoFDqYM6'
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <script>
+        const SUPABASE_CONFIG = {
+            restUrl: 'https://xuksvnotvestdgchgppg.supabase.co/rest/v1',
+            anonKeyParts: ['sb_publishable_', '6cYXev16SOZ4TyT9UYuDHQ_JEtuV5G5'],
+            stockTable: 'StockDispo',
+            pedidosTable: 'PedidoMutuOfline'
         };
 
-        /**
-         * Obtiene los datos almacenados en la base remota de JSONBin. Devuelve un
-         * objeto con las propiedades tabla1stock y tabla2Pedidos o un objeto
-         * vacío si no existen. Si ocurre un error (p. ej. red), se captura y se
-         * escribe en la consola.
-         */
-        async function fetchRemoteData() {
-            const url = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}/latest`;
+        const REFRESH_INTERVAL_MS = 180000; // 3 minutos
+
+        let pedidosCache = [];
+        let currentFilteredOrders = [];
+        let activePedidoColumnMap = null;
+
+        const PEDIDO_COLUMN_MAPPINGS = [
+            {
+                name: 'pedidos: minúsculas + Fecha',
+                id: 'id',
+                ldap: 'ldap',
+                tienda: 'tienda',
+                cc: 'cc',
+                circuito: 'circuito',
+                fecha: 'Fecha',
+                lineas: 'lineas',
+                impreso: 'impreso',
+                preparado: 'preparado'
+            },
+            {
+                name: 'pedidos: mayúscula inicial',
+                id: 'id',
+                ldap: 'LDAP',
+                tienda: 'Tienda',
+                cc: 'CC',
+                circuito: 'Circuito',
+                fecha: 'Fecha',
+                lineas: 'Lineas',
+                impreso: 'Impreso',
+                preparado: 'Preparado'
+            },
+            {
+                name: 'pedidos: cabecera en mayúsculas y líneas minúscula',
+                id: 'id',
+                ldap: 'LDAP',
+                tienda: 'Tienda',
+                cc: 'CC',
+                circuito: 'Circuito',
+                fecha: 'Fecha',
+                lineas: 'lineas',
+                impreso: 'Impreso',
+                preparado: 'Preparado'
+            }
+        ];
+
+        function getConfiguredAnonKey() {
+            return SUPABASE_CONFIG.anonKeyParts.join('');
+        }
+
+        function supabaseHeaders(extraHeaders = {}) {
+            const key = getConfiguredAnonKey();
+            if (!key) throw new Error('Falta configurar la publishable key de Supabase.');
+            return { apikey: key, Authorization: `Bearer ${key}`, ...extraHeaders };
+        }
+
+        function tableUrl(tableName, query = '') {
+            const base = `${SUPABASE_CONFIG.restUrl.replace(/\/$/, '')}/${encodeURIComponent(tableName)}`;
+            return query ? `${base}?${query}` : base;
+        }
+
+        async function supabaseRequest(tableName, { method = 'GET', query = '', body = null, headers = {} } = {}) {
+            const requestHeaders = supabaseHeaders(headers);
+            const options = { method, headers: requestHeaders };
+            if (body !== null) {
+                options.body = JSON.stringify(body);
+                if (!options.headers['Content-Type']) options.headers['Content-Type'] = 'application/json';
+            }
+            const response = await fetch(tableUrl(tableName, query), options);
+            const responseText = await response.text();
+            if (!response.ok) throw new Error(`${method} ${tableName} falló (${response.status}): ${responseText || response.statusText}`);
+            if (!responseText) return null;
+            try { return JSON.parse(responseText); } catch (error) { return responseText; }
+        }
+
+        function setStatus(message, ok = true) {
+            const el = document.getElementById('supabase-status');
+            el.textContent = message;
+            el.className = `status ${ok ? 'ok' : 'error'}`;
+        }
+
+        function setImportStatus(message, ok = true) {
+            const el = document.getElementById('import-status');
+            el.textContent = message;
+            el.className = `status ${ok ? 'ok' : 'error'}`;
+        }
+
+        function pick(obj, keys, fallback = '') {
+            for (const key of keys) {
+                if (obj && obj[key] !== undefined && obj[key] !== null) return obj[key];
+            }
+            return fallback;
+        }
+
+        function toText(value) {
+            return value === undefined || value === null ? '' : String(value).trim();
+        }
+
+        function toNumber(value) {
+            const normalized = typeof value === 'string' ? value.replace(',', '.') : value;
+            const n = Number(normalized);
+            return Number.isFinite(n) ? n : 0;
+        }
+
+        function toBool(value) {
+            if (typeof value === 'boolean') return value;
+            if (typeof value === 'number') return value !== 0;
+            const v = toText(value).toLowerCase();
+            return ['true', '1', 'si', 'sí', 'yes', 'y'].includes(v);
+        }
+
+        function normalizeKey(key) {
+            return key.toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '');
+        }
+
+        function escapeHtml(value) {
+            return toText(value).replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+            }[char]));
+        }
+
+        function selectQueryForColumns(columns) {
+            return `select=${columns.map(encodeURIComponent).join(',')}&limit=0`;
+        }
+
+
+        function extractDriveFileId(url) {
+            const match1 = url.match(/\/file\/d\/([^/]+)\/|\/uc\?id=([^&]+)/);
+            if (match1) return match1[1] || match1[2];
+            const match2 = url.match(/[?&]id=([^&]+)/);
+            if (match2) return match2[1];
+            return null;
+        }
+
+        function mapExcelRowsToStock(rows) {
+            const normalizedRows = rows.map(r => {
+                const obj = {};
+                for (const key of Object.keys(r)) obj[normalizeKey(key)] = r[key];
+                return obj;
+            });
+
+            return normalizedRows.map(r => ({
+                "Tienda": toText(r.tienda || ''),
+                "Address": toText(r.address || ''),
+                "SSCC": toText(r.sscc || ''),
+                "Product Code": toText(r.productcode || ''),
+                "EAN code": toText(r.eancode || ''),
+                "Product name": toText(r.productname || ''),
+                "Department": toText(r.department || ''),
+                "Qty": toNumber(r.qty || 0)
+            })).filter(item => item["Product Code"]);
+        }
+
+        async function borrarStockSupabase() {
+            await supabaseRequest(SUPABASE_CONFIG.stockTable, {
+                method: 'DELETE',
+                query: 'id=not.is.null',
+                headers: { Prefer: 'return=minimal' }
+            });
+        }
+
+        async function insertarStockPorBloques(articles) {
+            const chunkSize = 500;
+            for (let i = 0; i < articles.length; i += chunkSize) {
+                const chunk = articles.slice(i, i + chunkSize);
+                await supabaseRequest(SUPABASE_CONFIG.stockTable, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+                    body: chunk
+                });
+            }
+        }
+
+        async function reemplazarStockSupabase(articles) {
+            await borrarStockSupabase();
+            if (articles.length) await insertarStockPorBloques(articles);
+        }
+
+        async function importarStock() {
+            const fileInput = document.getElementById('import-stock');
+            const urlInput = document.getElementById('stock-url');
+            let arrayBuffer;
+            setImportStatus('', true);
+            if (!confirm('La importación reemplazará todos los registros actuales de StockDispo. ¿Continuar?')) return;
             try {
-                const response = await fetch(url, {
-                    method: 'GET',
-                    headers: {
-                        'X-Master-Key': JSONBIN_CONFIG.masterKey,
-                        'X-Access-Key': JSONBIN_CONFIG.accessKey,
-                        'X-Bin-Meta': 'false'
+                if (fileInput.files && fileInput.files.length > 0) {
+                    arrayBuffer = await fileInput.files[0].arrayBuffer();
+                } else if (urlInput.value.trim()) {
+                    let url = urlInput.value.trim();
+                    if (url.includes('drive.google.com')) {
+                        const fileId = extractDriveFileId(url);
+                        if (fileId) url = `https://drive.google.com/uc?export=download&id=${fileId}`;
                     }
-                });
-                if (!response.ok) throw new Error('Error al obtener datos remotos');
-                const json = await response.json();
-                return json.record || {};
-            } catch (error) {
-                console.error('No se pudo leer la base de datos remota:', error);
-                return {};
-            }
-        }
-
-        /**
-         * Guarda los datos actuales de stock y pedidos en la base remota de JSONBin.
-         * Recibe un objeto con las propiedades tabla1stock y tabla2Pedidos.
-         */
-        async function saveRemoteData(data) {
-            const url = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
-            try {
-                const response = await fetch(url, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Master-Key': JSONBIN_CONFIG.masterKey,
-                        'X-Access-Key': JSONBIN_CONFIG.accessKey,
-                        'X-Bin-Versioning': 'false'
-                    },
-                    body: JSON.stringify(data)
-                });
-                if (!response.ok) throw new Error('Error al guardar datos remotos');
-            } catch (error) {
-                console.error('No se pudo guardar en la base de datos remota:', error);
-            }
-        }
-
-        /**
-         * Sincroniza la base de datos local con la base remota al cargar la página.
-         * Descarga las tablas remotas y sobrescribe las tablas locales. Si no hay
-         * datos remotos, no realiza cambios.
-         */
-        async function initializeFromRemote() {
-            const remote = await fetchRemoteData();
-            try {
-                if (remote.tabla1stock) {
-                    await db.tabla1stock.clear();
-                    await db.tabla1stock.bulkAdd(remote.tabla1stock);
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error('Error al descargar el archivo desde la URL.');
+                    arrayBuffer = await response.arrayBuffer();
+                } else {
+                    setImportStatus('Selecciona un archivo o introduce una URL.', false);
+                    return;
                 }
-                if (remote.tabla2Pedidos) {
-                    await db.tabla2Pedidos.clear();
-                    await db.tabla2Pedidos.bulkAdd(remote.tabla2Pedidos);
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+                const articles = mapExcelRowsToStock(rows);
+                if (!articles.length) {
+                    setImportStatus('No se encontraron artículos válidos en el Excel.', false);
+                    return;
                 }
-            } catch (err) {
-                console.error('Error al sincronizar datos locales con la nube', err);
+                setImportStatus('Subiendo stock a Supabase...', true);
+                await reemplazarStockSupabase(articles);
+                setImportStatus(`Se importaron ${articles.length} artículos en StockDispo.`, true);
+            } catch (error) {
+                console.error(error);
+                setImportStatus(error.message || 'Error al importar el archivo.', false);
             }
         }
 
-        /**
-         * Renderiza una lista de pedidos en la tabla. Recibe un array de pedidos
-         * previamente filtrado y crea la estructura de filas, incluyendo
-         * checkboxes para "impreso" y "preparado" y botones de acciones.
-         */
+        function normalizePedidoRow(row) {
+            let lineas = pick(row, ['lineas', 'Lineas', 'líneas', 'LineasPedido'], []);
+            if (typeof lineas === 'string') {
+                try { lineas = JSON.parse(lineas); } catch (error) { lineas = []; }
+            }
+            if (!Array.isArray(lineas)) lineas = [];
+            return {
+                id: pick(row, ['id', 'ID'], undefined),
+                ldap: toText(pick(row, ['ldap', 'LDAP'])),
+                tienda: toText(pick(row, ['tienda', 'Tienda'])),
+                cc: toText(pick(row, ['cc', 'CC'])),
+                circuito: toText(pick(row, ['circuito', 'Circuito'])),
+                fecha: pick(row, ['fecha', 'Fecha', 'created_at', 'createdAt'], new Date().toISOString()),
+                lineas,
+                impreso: toBool(pick(row, ['impreso', 'Impreso'], false)),
+                preparado: toBool(pick(row, ['preparado', 'Preparado'], false)),
+                _raw: row
+            };
+        }
+
+        async function fetchPedidos() {
+            const queries = ['select=*&order=Fecha.desc', 'select=*&order=fecha.desc', 'select=*'];
+            let lastError = null;
+            for (const query of queries) {
+                try {
+                    const rows = await supabaseRequest(SUPABASE_CONFIG.pedidosTable, { query });
+                    return Array.isArray(rows) ? rows.map(normalizePedidoRow) : [];
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+            throw lastError;
+        }
+
+        async function cargarPedidosSupabase() {
+            try {
+                setStatus('Cargando pedidos...', true);
+                pedidosCache = await fetchPedidos();
+                setStatus(`Conectado. Pedidos: ${pedidosCache.length}.`, true);
+                applyFilters();
+            } catch (error) {
+                console.error(error);
+                setStatus(error.message, false);
+            }
+        }
+
+        async function validatePedidoMapping(mapping) {
+            const columns = [mapping.ldap, mapping.tienda, mapping.cc, mapping.circuito, mapping.fecha, mapping.lineas, mapping.impreso, mapping.preparado].filter(Boolean);
+            await supabaseRequest(SUPABASE_CONFIG.pedidosTable, { query: selectQueryForColumns(columns) });
+        }
+
+        async function getWorkingPedidoMapping() {
+            if (activePedidoColumnMap) return activePedidoColumnMap;
+            const errors = [];
+            for (const mapping of PEDIDO_COLUMN_MAPPINGS) {
+                try {
+                    await validatePedidoMapping(mapping);
+                    activePedidoColumnMap = mapping;
+                    return mapping;
+                } catch (error) {
+                    errors.push(`${mapping.name}: ${error.message}`);
+                }
+            }
+            throw new Error(`No pude detectar las columnas de PedidoMutuOfline. Detalle: ${errors[0] || 'sin detalle'}`);
+        }
+
+        function pedidoChangesToSupabaseRow(changes, mapping) {
+            const row = {};
+            if (Object.prototype.hasOwnProperty.call(changes, 'ldap')) row[mapping.ldap] = changes.ldap;
+            if (Object.prototype.hasOwnProperty.call(changes, 'tienda')) row[mapping.tienda] = changes.tienda;
+            if (Object.prototype.hasOwnProperty.call(changes, 'cc')) row[mapping.cc] = changes.cc;
+            if (Object.prototype.hasOwnProperty.call(changes, 'circuito')) row[mapping.circuito] = changes.circuito;
+            if (Object.prototype.hasOwnProperty.call(changes, 'fecha')) row[mapping.fecha] = changes.fecha;
+            if (Object.prototype.hasOwnProperty.call(changes, 'lineas')) row[mapping.lineas] = changes.lineas;
+            if (Object.prototype.hasOwnProperty.call(changes, 'impreso')) row[mapping.impreso] = changes.impreso;
+            if (Object.prototype.hasOwnProperty.call(changes, 'preparado')) row[mapping.preparado] = changes.preparado;
+            return row;
+        }
+
+        async function actualizarPedidoSupabase(orderId, changes) {
+            if (orderId === undefined || orderId === null || orderId === '') {
+                throw new Error('No se puede actualizar el pedido porque no tiene id.');
+            }
+            const mapping = await getWorkingPedidoMapping();
+            const updated = await supabaseRequest(SUPABASE_CONFIG.pedidosTable, {
+                method: 'PATCH',
+                query: `${encodeURIComponent(mapping.id || 'id')}=eq.${encodeURIComponent(orderId)}`,
+                headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+                body: pedidoChangesToSupabaseRow(changes, mapping)
+            });
+            if (Array.isArray(updated) && updated.length) return normalizePedidoRow(updated[0]);
+            return null;
+        }
+
         function renderOrders(orders) {
             const tbody = document.querySelector('#orders-table tbody');
             tbody.innerHTML = '';
+            if (!orders.length) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = '<td colspan="9">No hay pedidos para mostrar.</td>';
+                tbody.appendChild(tr);
+                return;
+            }
             orders.forEach(order => {
                 const tr = document.createElement('tr');
-                // Construir la fila principal con los datos básicos
                 tr.innerHTML = `
-                    <td>${order.id}</td>
-                    <td>${order.ldap}</td>
-                    <td>${order.tienda}</td>
-                    <td>${order.cc}</td>
-                    <td>${order.circuito}</td>
-                    <td>${new Date(order.fecha).toLocaleString('es-ES')}</td>
+                    <td>${escapeHtml(order.id)}</td>
+                    <td>${escapeHtml(order.ldap)}</td>
+                    <td>${escapeHtml(order.tienda)}</td>
+                    <td>${escapeHtml(order.cc)}</td>
+                    <td>${escapeHtml(order.circuito)}</td>
+                    <td>${escapeHtml(formatDate(order.fecha))}</td>
                     <td style="text-align:center;"><input type="checkbox" class="impreso-checkbox" ${order.impreso ? 'checked' : ''} /></td>
                     <td style="text-align:center;"><input type="checkbox" class="preparado-checkbox" ${order.preparado ? 'checked' : ''} /></td>
                     <td>
@@ -203,16 +429,14 @@
                     </td>
                 `;
                 tbody.appendChild(tr);
-                // Fila para mostrar los detalles del pedido (líneas)
                 const detailsRow = document.createElement('tr');
                 detailsRow.style.display = 'none';
                 const detailsCell = document.createElement('td');
-                // El número de columnas debe coincidir con el encabezado (ID, LDAP, Tienda, CC, Circuito, Fecha, Impreso, Preparado, Acciones)
                 detailsCell.colSpan = 9;
                 detailsCell.classList.add('details');
                 detailsRow.appendChild(detailsCell);
                 tbody.appendChild(detailsRow);
-                // Event handlers para expandir y contraer detalles
+
                 tr.querySelector('.details-btn').addEventListener('click', () => {
                     if (detailsRow.style.display === 'none') {
                         detailsCell.innerHTML = generateDetailsTable(order);
@@ -221,107 +445,75 @@
                         detailsRow.style.display = 'none';
                     }
                 });
-                // Checkbox de impreso: actualizar estado en base de datos al cambiar
+
                 const impresoCheckbox = tr.querySelector('.impreso-checkbox');
                 impresoCheckbox.addEventListener('change', async (e) => {
-                    // Actualizar estado de impreso en la base local
-                    await db.tabla2Pedidos.update(order.id, { impreso: e.target.checked });
-                    // Sincronizar con la base remota
-                    const [currentStock, currentOrders] = await Promise.all([
-                        db.tabla1stock.toArray(),
-                        db.tabla2Pedidos.toArray()
-                    ]);
-                    await saveRemoteData({ tabla1stock: currentStock, tabla2Pedidos: currentOrders });
+                    await updateOrderState(order, { impreso: e.target.checked });
                 });
-                // Checkbox de preparado: actualizar estado en base de datos al cambiar
+
                 const preparadoCheckbox = tr.querySelector('.preparado-checkbox');
                 preparadoCheckbox.addEventListener('change', async (e) => {
-                    // Actualizar estado de preparado en la base local
-                    await db.tabla2Pedidos.update(order.id, { preparado: e.target.checked });
-                    // Sincronizar con la base remota
-                    const [currentStock, currentOrders] = await Promise.all([
-                        db.tabla1stock.toArray(),
-                        db.tabla2Pedidos.toArray()
-                    ]);
-                    await saveRemoteData({ tabla1stock: currentStock, tabla2Pedidos: currentOrders });
+                    await updateOrderState(order, { preparado: e.target.checked });
                 });
-                // Exportar un pedido individual a Excel y marcar como impreso
+
                 tr.querySelector('.export-btn').addEventListener('click', async () => {
                     exportOrderToExcel(order);
-                    // Marcar como impreso
-                    await db.tabla2Pedidos.update(order.id, { impreso: true });
-                    // Actualizar el checkbox visualmente
                     impresoCheckbox.checked = true;
-                    // Sincronizar con la base remota
-                    const [currentStock, currentOrders] = await Promise.all([
-                        db.tabla1stock.toArray(),
-                        db.tabla2Pedidos.toArray()
-                    ]);
-                    await saveRemoteData({ tabla1stock: currentStock, tabla2Pedidos: currentOrders });
+                    await updateOrderState(order, { impreso: true });
                 });
-                // Imprimir un pedido individual y marcar como impreso
+
                 tr.querySelector('.print-btn').addEventListener('click', async () => {
                     printOrder(order);
-                    await db.tabla2Pedidos.update(order.id, { impreso: true });
                     impresoCheckbox.checked = true;
-                    // Sincronizar con la base remota
-                    const [currentStock, currentOrders] = await Promise.all([
-                        db.tabla1stock.toArray(),
-                        db.tabla2Pedidos.toArray()
-                    ]);
-                    await saveRemoteData({ tabla1stock: currentStock, tabla2Pedidos: currentOrders });
+                    await updateOrderState(order, { impreso: true });
                 });
             });
         }
 
-        /**
-         * Aplica los filtros seleccionados en la interfaz y renderiza los pedidos
-         * resultantes. Los filtros disponibles son: tienda, cc (cadena de texto
-         * contenida), circuito y fecha exacta. Si un filtro está vacío, no se
-         * aplica.
-         */
-        async function applyFilters() {
-            const tiendaFilter = document.getElementById('filter-tienda').value;
-            const ccFilter = document.getElementById('filter-cc').value.trim().toLowerCase();
-            const circuitoFilter = document.getElementById('filter-circuito').value;
-            const fechaFilter = document.getElementById('filter-fecha').value; // formato YYYY-MM-DD o ''
-            const orders = await db.tabla2Pedidos.toArray();
-            const filtered = orders.filter(order => {
-                if (tiendaFilter && order.tienda !== tiendaFilter) return false;
-                if (ccFilter && !order.cc.toLowerCase().includes(ccFilter)) return false;
-                if (circuitoFilter && order.circuito !== circuitoFilter) return false;
-                if (fechaFilter) {
-                    const isoDate = new Date(order.fecha).toISOString().split('T')[0];
-                    if (isoDate !== fechaFilter) return false;
-                }
-                return true;
-            });
-            renderOrders(filtered);
+        async function updateOrderState(order, changes) {
+            try {
+                const updated = await actualizarPedidoSupabase(order.id, changes);
+                Object.assign(order, changes, updated || {});
+                const index = pedidosCache.findIndex(p => String(p.id) === String(order.id));
+                if (index >= 0) pedidosCache[index] = { ...pedidosCache[index], ...order };
+                setStatus('Pedido actualizado en Supabase.', true);
+            } catch (error) {
+                console.error(error);
+                alert(`Error al actualizar el pedido: ${error.message}`);
+                await cargarPedidosSupabase();
+            }
         }
 
-        /**
-         * Exporta los pedidos filtrados a un único archivo Excel. Cada fila
-         * representará un pedido con sus datos básicos y estado de impreso y
-         * preparado. El nombre del archivo se generará con la fecha actual.
-         */
-        async function exportFilteredOrders() {
-            // Aplicamos filtros para obtener la lista actual
+        function formatDate(value) {
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return toText(value);
+            return date.toLocaleString('es-ES');
+        }
+
+        function applyFilters() {
             const tiendaFilter = document.getElementById('filter-tienda').value;
             const ccFilter = document.getElementById('filter-cc').value.trim().toLowerCase();
             const circuitoFilter = document.getElementById('filter-circuito').value;
             const fechaFilter = document.getElementById('filter-fecha').value;
-            const orders = await db.tabla2Pedidos.toArray();
-            const filtered = orders.filter(order => {
+            currentFilteredOrders = pedidosCache.filter(order => {
                 if (tiendaFilter && order.tienda !== tiendaFilter) return false;
                 if (ccFilter && !order.cc.toLowerCase().includes(ccFilter)) return false;
                 if (circuitoFilter && order.circuito !== circuitoFilter) return false;
                 if (fechaFilter) {
-                    const isoDate = new Date(order.fecha).toISOString().split('T')[0];
-                    if (isoDate !== fechaFilter) return false;
+                    const date = new Date(order.fecha);
+                    if (Number.isNaN(date.getTime()) || date.toISOString().split('T')[0] !== fechaFilter) return false;
                 }
                 return true;
             });
-            // Construir datos para la hoja: encabezados y filas
+            renderOrders(currentFilteredOrders);
+        }
+
+        async function exportFilteredOrders() {
+            const filtered = currentFilteredOrders.length ? currentFilteredOrders : pedidosCache;
+            if (!filtered.length) {
+                alert('No hay pedidos para exportar.');
+                return;
+            }
             const wsData = [];
             wsData.push(['ID', 'LDAP', 'Tienda', 'CC', 'Circuito', 'Fecha', 'Impreso', 'Preparado']);
             filtered.forEach(order => {
@@ -331,7 +523,7 @@
                     order.tienda,
                     order.cc,
                     order.circuito,
-                    new Date(order.fecha).toLocaleString('es-ES'),
+                    formatDate(order.fecha),
                     order.impreso ? 'Sí' : 'No',
                     order.preparado ? 'Sí' : 'No'
                 ]);
@@ -339,70 +531,56 @@
             const worksheet = XLSX.utils.aoa_to_sheet(wsData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, 'PedidosFiltrados');
-            const today = new Date();
-            const fileName = `pedidos_filtrados_${today.toISOString().split('T')[0]}.xlsx`;
+            const fileName = `pedidos_filtrados_${new Date().toISOString().split('T')[0]}.xlsx`;
             XLSX.writeFile(workbook, fileName);
-            // Opcional: marcar todos los pedidos exportados como impreso
-            await Promise.all(filtered.map(order => db.tabla2Pedidos.update(order.id, { impreso: true })));
-            // Sincronizar todos los datos con la base remota
-            const [currentStock, currentOrders] = await Promise.all([
-                db.tabla1stock.toArray(),
-                db.tabla2Pedidos.toArray()
-            ]);
-            await saveRemoteData({ tabla1stock: currentStock, tabla2Pedidos: currentOrders });
-            // Volver a aplicar filtros para actualizar checkboxes
-            applyFilters();
+            try {
+                await Promise.all(filtered.map(order => actualizarPedidoSupabase(order.id, { impreso: true })));
+                await cargarPedidosSupabase();
+            } catch (error) {
+                console.error(error);
+                alert(`Exportado, pero no se pudo marcar todo como impreso: ${error.message}`);
+            }
         }
 
-        // Generar tabla con los detalles de un pedido
         function generateDetailsTable(order) {
             let html = '<table><thead><tr><th>Referencia</th><th>Designación</th><th>Sección</th><th>Cant. solicitada</th><th>Cant. disponible</th><th>Ubicaciones</th></tr></thead><tbody>';
             order.lineas.forEach(l => {
-                html += `<tr><td>${l.referencia}</td><td>${l.designacion}</td><td>${l.seccion}</td><td>${l.cantSolicitada}</td><td>${l.cantDisponible}</td><td>${l.ubicaciones}</td></tr>`;
+                html += `<tr><td>${escapeHtml(l.referencia)}</td><td>${escapeHtml(l.designacion)}</td><td>${escapeHtml(l.seccion)}</td><td>${escapeHtml(l.cantSolicitada)}</td><td>${escapeHtml(l.cantDisponible)}</td><td>${escapeHtml(l.ubicaciones)}</td></tr>`;
             });
             html += '</tbody></table>';
             return html;
         }
 
-        // Exportar un pedido a un archivo Excel
         function exportOrderToExcel(order) {
             const wsData = [];
-            // Encabezado del pedido
             wsData.push(['LDAP', order.ldap]);
             wsData.push(['Tienda', order.tienda]);
             wsData.push(['CC', order.cc]);
             wsData.push(['Circuito', order.circuito]);
-            wsData.push(['Fecha', new Date(order.fecha).toLocaleString('es-ES')]);
-            wsData.push([]); // fila en blanco
-            // Encabezados de líneas
+            wsData.push(['Fecha', formatDate(order.fecha)]);
+            wsData.push([]);
             wsData.push(['Referencia', 'Designación', 'Sección', 'Cant. solicitada', 'Cant. disponible', 'Ubicaciones']);
-            order.lineas.forEach(l => {
-                wsData.push([l.referencia, l.designacion, l.seccion, l.cantSolicitada, l.cantDisponible, l.ubicaciones]);
-            });
+            order.lineas.forEach(l => wsData.push([l.referencia, l.designacion, l.seccion, l.cantSolicitada, l.cantDisponible, l.ubicaciones]));
             const worksheet = XLSX.utils.aoa_to_sheet(wsData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, 'Pedido');
-            const fileName = `pedido_${order.id}.xlsx`;
-            XLSX.writeFile(workbook, fileName);
+            XLSX.writeFile(workbook, `pedido_${order.id}.xlsx`);
         }
 
-        // Imprimir pedido
         function printOrder(order) {
             const printWindow = window.open('', '_blank');
             const doc = printWindow.document;
             doc.write('<html><head><title>Imprimir Pedido</title>');
             doc.write('<style>table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f2f2f2;}</style>');
             doc.write('</head><body>');
-            doc.write(`<h2>Pedido #${order.id}</h2>`);
-            doc.write('<h3>Cabecera</h3>');
-            doc.write('<table><tbody>');
-            doc.write(`<tr><td><strong>LDAP:</strong></td><td>${order.ldap}</td></tr>`);
-            doc.write(`<tr><td><strong>Tienda:</strong></td><td>${order.tienda}</td></tr>`);
-            doc.write(`<tr><td><strong>CC:</strong></td><td>${order.cc}</td></tr>`);
-            doc.write(`<tr><td><strong>Circuito:</strong></td><td>${order.circuito}</td></tr>`);
-            doc.write(`<tr><td><strong>Fecha:</strong></td><td>${new Date(order.fecha).toLocaleString('es-ES')}</td></tr>`);
-            doc.write('</tbody></table>');
-            doc.write('<h3>Líneas</h3>');
+            doc.write(`<h2>Pedido #${escapeHtml(order.id)}</h2>`);
+            doc.write('<h3>Cabecera</h3><table><tbody>');
+            doc.write(`<tr><td><strong>LDAP:</strong></td><td>${escapeHtml(order.ldap)}</td></tr>`);
+            doc.write(`<tr><td><strong>Tienda:</strong></td><td>${escapeHtml(order.tienda)}</td></tr>`);
+            doc.write(`<tr><td><strong>CC:</strong></td><td>${escapeHtml(order.cc)}</td></tr>`);
+            doc.write(`<tr><td><strong>Circuito:</strong></td><td>${escapeHtml(order.circuito)}</td></tr>`);
+            doc.write(`<tr><td><strong>Fecha:</strong></td><td>${escapeHtml(formatDate(order.fecha))}</td></tr>`);
+            doc.write('</tbody></table><h3>Líneas</h3>');
             doc.write(generateDetailsTable(order));
             doc.write('</body></html>');
             doc.close();
@@ -412,38 +590,12 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            // Sincronizar la base de datos local con la remota antes de aplicar filtros
-            initializeFromRemote().then(() => {
-                // Cargar y renderizar pedidos utilizando los filtros actuales al inicio
-                applyFilters();
-                // Establecer un temporizador para refrescar datos periódicamente
-                const REFRESH_INTERVAL_MS = 600000; // 10 minutos
-                setInterval(async () => {
-                    try {
-                        const remoteData = await fetchRemoteData();
-                        let updated = false;
-                        if (remoteData && remoteData.tabla1stock) {
-                            await db.tabla1stock.clear();
-                            await db.tabla1stock.bulkAdd(remoteData.tabla1stock);
-                            updated = true;
-                        }
-                        if (remoteData && remoteData.tabla2Pedidos) {
-                            await db.tabla2Pedidos.clear();
-                            await db.tabla2Pedidos.bulkAdd(remoteData.tabla2Pedidos);
-                            updated = true;
-                        }
-                        // Si hubo actualización, volver a aplicar filtros para refrescar la tabla
-                        if (updated) {
-                            applyFilters();
-                        }
-                    } catch (err) {
-                        console.error('Error al actualizar datos desde la nube:', err);
-                    }
-                }, REFRESH_INTERVAL_MS);
-            });
-            // Asociar eventos a botones de filtro y exportación
+            document.getElementById('refresh-orders-btn').addEventListener('click', cargarPedidosSupabase);
+            document.getElementById('import-btn').addEventListener('click', importarStock);
             document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
             document.getElementById('export-filtered-btn').addEventListener('click', exportFilteredOrders);
+            cargarPedidosSupabase();
+            setInterval(cargarPedidosSupabase, REFRESH_INTERVAL_MS);
         });
     </script>
 </body>

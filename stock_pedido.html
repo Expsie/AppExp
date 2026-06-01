@@ -3,76 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>App de stock y pedidos</title>
+    <title>App de stock y pedidos - Supabase</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        h1 {
-            text-align: center;
-        }
-        .section {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        input, select {
-            padding: 6px;
-            margin-bottom: 10px;
-            width: 100%;
-            max-width: 300px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        th, td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-        tbody tr:nth-child(odd) {
-            background-color: #fafafa;
-        }
-        button {
-            margin-right: 5px;
-            padding: 8px 12px;
-            font-size: 1em;
-        }
-        .line-row input {
-            width: 100%;
-            box-sizing: border-box;
-        }
-        .actions {
-            margin-top: 10px;
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { text-align: center; }
+        .section { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { padding: 6px; margin-bottom: 10px; width: 100%; max-width: 420px; box-sizing: border-box; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        tbody tr:nth-child(odd) { background-color: #fafafa; }
+        button { margin-right: 5px; margin-bottom: 5px; padding: 8px 12px; font-size: 1em; }
+        code { background: #f5f5f5; padding: 2px 4px; border-radius: 4px; }
+        .line-row input { width: 100%; box-sizing: border-box; }
+        .status { display: inline-block; margin-left: 8px; font-weight: bold; }
+        .muted { color: #666; font-size: 0.95em; }
+        .error { color: #a40000; }
+        .ok { color: #0a6b12; }
     </style>
 </head>
 <body>
     <h1>Gestor de stock y pedidos</h1>
 
-    <!-- Sección para importar el stock -->
-    <div class="section" id="import-section">
-        <h2>Importar stock (Tabla1Stock)</h2>
-        <p>Selecciona un archivo Excel con las columnas: <strong>referencia</strong>, <strong>designacion</strong>, <strong>seccion</strong>, <strong>stockDisponible</strong>, <strong>ubicaciones</strong> y <strong>tienda</strong>. Cada fila representará un artículo específico de una tienda concreta.</p>
-        <input type="file" id="import-stock" accept=".xlsx,.xls" />
-        <div style="margin-top:5px;">
-            <label for="stock-url">URL del archivo en Drive (opcional)</label>
-            <input type="url" id="stock-url" placeholder="https://drive.google.com/…" style="width:100%;max-width:300px;" />
+    <div class="section" id="supabase-section">
+        <h2>Conexión con Supabase</h2>
+        <p class="muted">Conexión configurada. Esta pantalla solo permite crear pedidos; la actualización/importación manual de stock está en <code>ver_pedidos.html</code>.</p>
+        <div>
+            <button type="button" id="refresh-data-btn">Actualizar ahora</button>
+            <span id="supabase-status" class="status"></span>
         </div>
-        <button type="button" id="import-btn">Importar stock</button>
-        <span id="import-status"></span>
     </div>
 
-    <!-- Formulario de cabecera de pedido -->
     <div class="section" id="pedido-section">
         <h2>Crear pedido de stock</h2>
         <div>
@@ -81,7 +43,6 @@
         </div>
         <div>
             <label for="tienda">Tienda</label>
-            <!-- Sustituimos el campo de texto de tienda por un desplegable con valores T038 o T006 -->
             <select id="tienda" required>
                 <option value="">Seleccione una tienda</option>
                 <option value="T038">T038</option>
@@ -104,7 +65,6 @@
         <button type="button" id="add-line-btn">Añadir línea</button>
         <button type="button" id="finalize-btn">Finalizar pedido</button>
         <button type="button" id="view-orders-btn">Ver pedidos guardados</button>
-        <!-- Tabla de líneas de pedido -->
         <table id="lines-table">
             <thead>
                 <tr>
@@ -121,199 +81,371 @@
         </table>
     </div>
 
-    <!-- Librerías externas -->
     <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
-    <script src="https://unpkg.com/dexie@3.0.3/dist/dexie.min.js"></script>
     <script>
-        // Inicializar base de datos con Dexie
-        // A partir de la versión 2 incluimos el campo "tienda" en la tabla1stock para 
-        // poder almacenar existencias por tienda. Al incrementar la versión,
-        // Dexie migrará automáticamente las estructuras si es necesario.
-        const db = new Dexie('stockDB');
-        // Versión 3: añadimos los campos "impreso" y "preparado" a la tabla2Pedidos
-        db.version(3).stores({
-            // Añadimos "tienda" como propiedad indexada para poder filtrar por tienda
-            tabla1stock: '++id, referencia, tienda, designacion, seccion, stockDisponible, ubicaciones',
-            // Se añaden impreso y preparado como propiedades no indexadas
-            tabla2Pedidos: '++id, ldap, tienda, cc, circuito, fecha, lineas, impreso, preparado'
-        });
-
-        // Configuración de JSONBin para almacenar datos en la nube. Sustituye estas
-        // constantes si cambias de bin o de clave. El usuario ha proporcionado
-        // estos valores para conectar con la base de datos remota.
-        const JSONBIN_CONFIG = {
-            // Identificador del contenedor donde se guardan los datos
-            binId: '68e75f42ae596e708f0b76b0',
-            // Claves actualizadas proporcionadas por el usuario. masterKey y accessKey
-            masterKey: '$2a$10$EAIHx3onTDxlqZkPRHKSiunmhJpEgtrqv8OCHwrG/gOyXp6eNNu.S',
-            accessKey: '$2a$10$DCiKL4ue44Wt2C8N1bZ35umFj.KvbtFDrC2cZb4l66wQAgoFDqYM6'
+        const SUPABASE_CONFIG = {
+            restUrl: 'https://xuksvnotvestdgchgppg.supabase.co/rest/v1',
+            anonKeyParts: ['sb_publishable_', '6cYXev16SOZ4TyT9UYuDHQ_JEtuV5G5'],
+            stockTable: 'StockDispo',
+            pedidosTable: 'PedidoMutuOfline'
         };
 
-        /**
-         * Obtiene los datos almacenados en la base remota de JSONBin. Devuelve un
-         * objeto con las propiedades tabla1stock y tabla2Pedidos o un objeto
-         * vacío si no existen. Si ocurre un error (p. ej. red), se captura y se
-         * escribe en la consola.
-         */
-        async function fetchRemoteData() {
-            const url = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}/latest`;
+        const REFRESH_INTERVAL_MS = 180000; // 3 minutos
+
+        let stockCache = [];
+        let pedidosCache = [];
+        let activeStockColumnMap = null;
+        let activePedidoColumnMap = null;
+
+        // Supabase/PostgreSQL distingue nombres como fecha y "Fecha".
+        // Probamos varios mapas para adaptarnos a tablas creadas con mayúsculas o minúsculas.
+        const STOCK_COLUMN_MAPPINGS = [
+            {
+                name: 'stock: StockDispo real Supabase',
+                id: 'id',
+                referencia: 'Product Code',
+                designacion: 'Product name',
+                seccion: 'Department',
+                stockDisponible: 'Qty',
+                ubicaciones: 'Address',
+                tienda: 'Tienda',
+                sscc: 'SSCC',
+                ean: 'EAN code'
+            },
+            {
+                name: 'stock: mayúscula inicial',
+                id: 'id',
+                referencia: 'Referencia',
+                designacion: 'Designacion',
+                seccion: 'Seccion',
+                stockDisponible: 'StockDisponible',
+                ubicaciones: 'Ubicaciones',
+                tienda: 'Tienda'
+            },
+            {
+                name: 'stock: mayúscula inicial con acentos',
+                id: 'id',
+                referencia: 'Referencia',
+                designacion: 'Designación',
+                seccion: 'Sección',
+                stockDisponible: 'StockDisponible',
+                ubicaciones: 'Ubicaciones',
+                tienda: 'Tienda'
+            },
+            {
+                name: 'stock: minúsculas/camelCase',
+                id: 'id',
+                referencia: 'referencia',
+                designacion: 'designacion',
+                seccion: 'seccion',
+                stockDisponible: 'stockDisponible',
+                ubicaciones: 'ubicaciones',
+                tienda: 'tienda'
+            }
+        ];
+
+        const PEDIDO_COLUMN_MAPPINGS = [
+            {
+                name: 'pedidos: minúsculas + Fecha',
+                id: 'id',
+                ldap: 'ldap',
+                tienda: 'tienda',
+                cc: 'cc',
+                circuito: 'circuito',
+                fecha: 'Fecha',
+                lineas: 'lineas',
+                impreso: 'impreso',
+                preparado: 'preparado'
+            },
+            {
+                name: 'pedidos: mayúscula inicial',
+                id: 'id',
+                ldap: 'LDAP',
+                tienda: 'Tienda',
+                cc: 'CC',
+                circuito: 'Circuito',
+                fecha: 'Fecha',
+                lineas: 'Lineas',
+                impreso: 'Impreso',
+                preparado: 'Preparado'
+            },
+            {
+                name: 'pedidos: cabecera en mayúsculas y líneas minúscula',
+                id: 'id',
+                ldap: 'LDAP',
+                tienda: 'Tienda',
+                cc: 'CC',
+                circuito: 'Circuito',
+                fecha: 'Fecha',
+                lineas: 'lineas',
+                impreso: 'Impreso',
+                preparado: 'Preparado'
+            }
+        ];
+
+        function getConfiguredAnonKey() {
+            return SUPABASE_CONFIG.anonKeyParts.join('');
+        }
+
+        function supabaseHeaders(extraHeaders = {}) {
+            const key = getConfiguredAnonKey();
+            if (!key) {
+                throw new Error('Falta configurar la publishable key de Supabase.');
+            }
+            return {
+                apikey: key,
+                Authorization: `Bearer ${key}`,
+                ...extraHeaders
+            };
+        }
+
+        function tableUrl(tableName, query = '') {
+            const base = `${SUPABASE_CONFIG.restUrl.replace(/\/$/, '')}/${encodeURIComponent(tableName)}`;
+            return query ? `${base}?${query}` : base;
+        }
+
+        async function supabaseRequest(tableName, { method = 'GET', query = '', body = null, headers = {} } = {}) {
+            const requestHeaders = supabaseHeaders(headers);
+            const options = { method, headers: requestHeaders };
+            if (body !== null) {
+                options.body = JSON.stringify(body);
+                if (!options.headers['Content-Type']) options.headers['Content-Type'] = 'application/json';
+            }
+            const response = await fetch(tableUrl(tableName, query), options);
+            const responseText = await response.text();
+            if (!response.ok) {
+                throw new Error(`${method} ${tableName} falló (${response.status}): ${responseText || response.statusText}`);
+            }
+            if (!responseText) return null;
             try {
-                const response = await fetch(url, {
-                    method: 'GET',
-                    headers: {
-                        'X-Master-Key': JSONBIN_CONFIG.masterKey,
-                        'X-Access-Key': JSONBIN_CONFIG.accessKey,
-                        'X-Bin-Meta': 'false'
-                    }
-                });
-                if (!response.ok) throw new Error('Error al obtener datos remotos');
-                const json = await response.json();
-                return json.record || {};
+                return JSON.parse(responseText);
             } catch (error) {
-                console.error('No se pudo leer la base de datos remota:', error);
-                return {};
+                return responseText;
             }
         }
 
-        /**
-         * Guarda los datos actuales de stock y pedidos en la base remota de JSONBin.
-         * Recibe un objeto con las propiedades tabla1stock y tabla2Pedidos.
-         */
-        async function saveRemoteData(data) {
-            const url = `https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG.binId}`;
-            try {
-                const response = await fetch(url, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Master-Key': JSONBIN_CONFIG.masterKey,
-                        'X-Access-Key': JSONBIN_CONFIG.accessKey,
-                        'X-Bin-Versioning': 'false'
-                    },
-                    body: JSON.stringify(data)
-                });
-                if (!response.ok) throw new Error('Error al guardar datos remotos');
-            } catch (error) {
-                console.error('No se pudo guardar en la base de datos remota:', error);
-            }
-        }
-
-        /**
-         * Sincroniza la base de datos local con la base remota al cargar la página.
-         * Descarga las tablas remotas y sobrescribe las tablas locales. Si no hay
-         * datos remotos, no realiza cambios. Esta función se llama durante
-         * DOMContentLoaded antes de asignar eventos.
-         */
-        async function initializeFromRemote() {
-            const remote = await fetchRemoteData();
-            try {
-                if (remote.tabla1stock) {
-                    await db.tabla1stock.clear();
-                    await db.tabla1stock.bulkAdd(remote.tabla1stock);
-                }
-                if (remote.tabla2Pedidos) {
-                    await db.tabla2Pedidos.clear();
-                    await db.tabla2Pedidos.bulkAdd(remote.tabla2Pedidos);
-                }
-            } catch (err) {
-                console.error('Error al sincronizar datos locales con la nube', err);
-            }
-        }
-
-        // Función para extraer el ID de un enlace de Google Drive. Devuelve null si no se encuentra.
-        function extractDriveFileId(url) {
-            const match1 = url.match(/\/file\/d\/([^/]+)\/|\/uc\?id=([^&]+)/);
-            if (match1) return match1[1] || match1[2];
-            const match2 = url.match(/[?&]id=([^&]+)/);
-            if (match2) return match2[1];
-            return null;
-        }
-
-        // Función para importar stock desde un archivo local o una URL de Drive
-        async function importarStock() {
-            const importStatus = document.getElementById('import-status');
-            const fileInput = document.getElementById('import-stock');
-            const urlInput = document.getElementById('stock-url');
-            let arrayBuffer;
-            importStatus.textContent = '';
-            if (fileInput.files && fileInput.files.length > 0) {
-                // Leer archivo local
-                const file = fileInput.files[0];
-                arrayBuffer = await file.arrayBuffer();
-            } else if (urlInput.value.trim()) {
-                // Descargar archivo desde URL
-                let url = urlInput.value.trim();
-                // Si es un enlace de Google Drive, transformarlo al formato de descarga directa
-                if (url.includes('drive.google.com')) {
-                    const fileId = extractDriveFileId(url);
-                    if (fileId) {
-                        url = `https://drive.google.com/uc?export=download&id=${fileId}`;
-                    }
-                }
+        async function findExistingColumn(tableName, candidates) {
+            const uniqueCandidates = [...new Set(candidates.filter(Boolean))];
+            const errors = [];
+            for (const column of uniqueCandidates) {
                 try {
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error();
-                    arrayBuffer = await response.arrayBuffer();
-                } catch (err) {
-                    console.error(err);
-                    importStatus.textContent = 'Error al descargar el archivo desde la URL.';
-                    return;
+                    await supabaseRequest(tableName, { query: `select=${encodeURIComponent(column)}&limit=1` });
+                    return column;
+                } catch (error) {
+                    errors.push(`${column}: ${error.message}`);
                 }
-            } else {
-                importStatus.textContent = 'Selecciona un archivo o introduce una URL.';
-                return;
+            }
+            return { column: null, errors };
+        }
+
+        function setStatus(message, ok = true) {
+            const el = document.getElementById('supabase-status');
+            el.textContent = message;
+            el.className = `status ${ok ? 'ok' : 'error'}`;
+        }
+
+        function pick(obj, keys, fallback = '') {
+            for (const key of keys) {
+                if (obj && obj[key] !== undefined && obj[key] !== null) return obj[key];
+            }
+            return fallback;
+        }
+
+        function toText(value) {
+            return value === undefined || value === null ? '' : String(value).trim();
+        }
+
+        function toNumber(value) {
+            const normalized = typeof value === 'string' ? value.replace(',', '.') : value;
+            const n = Number(normalized);
+            return Number.isFinite(n) ? n : 0;
+        }
+
+        function toBool(value) {
+            if (typeof value === 'boolean') return value;
+            if (typeof value === 'number') return value !== 0;
+            const v = toText(value).toLowerCase();
+            return ['true', '1', 'si', 'sí', 'yes', 'y'].includes(v);
+        }
+
+        function normalizeKey(key) {
+            return key.toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '');
+        }
+
+        function normalizeStockRow(row) {
+            return {
+                id: pick(row, ['id', 'ID'], undefined),
+                referencia: toText(pick(row, ['Product Code', 'referencia', 'Referencia', 'productcode', 'productCode', 'codigo', 'Código', 'Codigo'])),
+                designacion: toText(pick(row, ['Product name', 'designacion', 'designación', 'Designacion', 'Designación', 'descripcion', 'Descripción', 'Descripcion', 'productname', 'productName'])),
+                seccion: toText(pick(row, ['Department', 'seccion', 'sección', 'Seccion', 'Sección', 'department', 'departamento', 'Departamento'])),
+                stockDisponible: toNumber(pick(row, ['Qty', 'stockDisponible', 'stockdisponible', 'stock_disponible', 'StockDisponible', 'Stock Disponible', 'Stock disponible', 'Stock_Disponible', 'qty', 'cantidad', 'Cantidad', 'stock', 'Stock'])),
+                ubicaciones: toText(pick(row, ['Address', 'ubicaciones', 'Ubicaciones', 'address', 'ubicacion', 'ubicación', 'Ubicacion', 'Ubicación'])),
+                tienda: toText(pick(row, ['Tienda', 'tienda', 'store', 'Store'])),
+                sscc: toText(pick(row, ['SSCC', 'sscc'])),
+                ean: toText(pick(row, ['EAN code', 'eancode', 'ean', 'EAN'])),
+                _raw: row
+            };
+        }
+
+        function detectStockMappingFromRows() {
+            const rawRow = stockCache.map(item => item._raw).find(Boolean);
+            if (!rawRow) return null;
+            const keys = Object.keys(rawRow);
+            const choose = (candidates) => candidates.find(key => keys.includes(key));
+            const mapping = {
+                name: 'stock: detectado desde datos existentes',
+                id: choose(['id', 'ID']) || 'id',
+                referencia: choose(['Product Code', 'referencia', 'Referencia']),
+                designacion: choose(['Product name', 'designacion', 'designación', 'Designacion', 'Designación', 'descripcion', 'Descripción', 'Descripcion']),
+                seccion: choose(['Department', 'seccion', 'sección', 'Seccion', 'Sección']),
+                stockDisponible: choose(['Qty', 'stockDisponible', 'stockdisponible', 'stock_disponible', 'StockDisponible', 'Stock Disponible', 'Stock disponible', 'Stock_Disponible', 'stock', 'Stock', 'qty', 'cantidad', 'Cantidad']),
+                ubicaciones: choose(['Address', 'ubicaciones', 'Ubicaciones', 'ubicacion', 'ubicación', 'Ubicacion', 'Ubicación', 'address']),
+                tienda: choose(['Tienda', 'tienda', 'store', 'Store']),
+                sscc: choose(['SSCC', 'sscc']),
+                ean: choose(['EAN code', 'eancode', 'ean', 'EAN'])
+            };
+            return mapping.referencia && mapping.stockDisponible && mapping.tienda ? mapping : null;
+        }
+
+        function selectQueryForColumns(columns) {
+            return `select=${columns.map(encodeURIComponent).join(',')}&limit=0`;
+        }
+
+        async function validateStockMapping(mapping) {
+            const requiredColumns = [mapping.referencia, mapping.stockDisponible, mapping.tienda].filter(Boolean);
+            const optionalColumns = [mapping.designacion, mapping.seccion, mapping.ubicaciones].filter(Boolean);
+            const columns = [...new Set([...requiredColumns, ...optionalColumns])];
+            await supabaseRequest(SUPABASE_CONFIG.stockTable, { query: selectQueryForColumns(columns) });
+        }
+
+        async function getWorkingStockMapping() {
+            if (activeStockColumnMap) return activeStockColumnMap;
+            const detected = detectStockMappingFromRows();
+            const candidates = [detected, ...STOCK_COLUMN_MAPPINGS].filter(Boolean);
+            const seen = new Set();
+            const uniqueCandidates = candidates.filter(mapping => {
+                const signature = [mapping.referencia, mapping.designacion, mapping.seccion, mapping.stockDisponible, mapping.ubicaciones, mapping.tienda].join('|');
+                if (seen.has(signature)) return false;
+                seen.add(signature);
+                return true;
+            });
+            const errors = [];
+            for (const mapping of uniqueCandidates) {
+                try {
+                    await validateStockMapping(mapping);
+                    activeStockColumnMap = mapping;
+                    return mapping;
+                } catch (error) {
+                    errors.push(`${mapping.name}: ${error.message}`);
+                }
+            }
+            throw new Error(`No pude detectar las columnas de StockDispo. Según tu tabla deben ser Product Code, Product name, Department, Qty, Address y Tienda. Detalle: ${errors[0] || 'sin detalle'}`);
+        }
+
+        function normalizePedidoRow(row) {
+            let lineas = pick(row, ['lineas', 'Lineas', 'líneas', 'LineasPedido'], []);
+            if (typeof lineas === 'string') {
+                try { lineas = JSON.parse(lineas); } catch (error) { lineas = []; }
+            }
+            if (!Array.isArray(lineas)) lineas = [];
+            return {
+                id: pick(row, ['id', 'ID'], undefined),
+                ldap: toText(pick(row, ['ldap', 'LDAP'])),
+                tienda: toText(pick(row, ['tienda', 'Tienda'])),
+                cc: toText(pick(row, ['cc', 'CC'])),
+                circuito: toText(pick(row, ['circuito', 'Circuito'])),
+                fecha: pick(row, ['fecha', 'Fecha', 'created_at', 'createdAt'], new Date().toISOString()),
+                lineas,
+                impreso: toBool(pick(row, ['impreso', 'Impreso'], false)),
+                preparado: toBool(pick(row, ['preparado', 'Preparado'], false)),
+                _raw: row
+            };
+        }
+
+        async function fetchStock() {
+            const rows = await supabaseRequest(SUPABASE_CONFIG.stockTable, { query: 'select=*' });
+            return Array.isArray(rows) ? rows.map(normalizeStockRow).filter(item => item.referencia) : [];
+        }
+
+        async function fetchPedidos() {
+            const queries = ['select=*&order=Fecha.desc', 'select=*&order=fecha.desc', 'select=*'];
+            let lastError = null;
+            for (const query of queries) {
+                try {
+                    const rows = await supabaseRequest(SUPABASE_CONFIG.pedidosTable, { query });
+                    return Array.isArray(rows) ? rows.map(normalizePedidoRow) : [];
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+            throw lastError;
+        }
+
+        async function cargarDatosSupabase() {
+            setStatus('Conectando...', true);
+            const errors = [];
+            try {
+                stockCache = await fetchStock();
+            } catch (error) {
+                console.error(error);
+                errors.push(`StockDispo: ${error.message}`);
             }
             try {
-                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-                const sheetName = workbook.SheetNames[0];
-                const sheet = workbook.Sheets[sheetName];
-                const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-                /*
-                 * Las hojas Excel pueden tener nombres de columnas en distintos idiomas o con
-                 * mayúsculas/espacios. Normalizamos las claves a minúsculas sin espacios y
-                 * proporcionamos sinónimos para mapear los campos esperados. Por ejemplo,
-                 * "Product Code" se convierte en "productcode" y se asocia a la
-                 * propiedad "referencia".
-                 */
-                const normalizedRows = rows.map(r => {
-                    const obj = {};
-                    for (const key of Object.keys(r)) {
-                        const normalizedKey = key.toString().trim().toLowerCase().replace(/\s+/g, '');
-                        obj[normalizedKey] = r[key];
-                    }
-                    return obj;
-                });
-                const articles = normalizedRows.map(r => {
-                    // Determinar referencia: puede venir como "referencia" o "productcode"
-                    const referencia = r.referencia || r.productcode || '';
-                    const designacion = r.designacion || r.productname || '';
-                    const seccion = r.seccion || r.department || '';
-                    // stockDisponible puede venir como "stockdisponible" o "qty"
-                    const stock = r.stockdisponible || r.qty || 0;
-                    const ubicaciones = r.ubicaciones || r.address || '';
-                    const tienda = r.tienda || r.store || '';
-                    return {
-                        referencia: referencia?.toString().trim(),
-                        designacion: designacion?.toString().trim(),
-                        seccion: seccion?.toString().trim(),
-                        stockDisponible: Number(stock) || 0,
-                        ubicaciones: ubicaciones?.toString().trim(),
-                        tienda: tienda?.toString().trim() || ''
-                    };
-                }).filter(item => item.referencia);
-                await db.tabla1stock.clear();
-                await db.tabla1stock.bulkAdd(articles);
-                // Guardar también en la base remota junto con los pedidos existentes
-                const currentOrders = await db.tabla2Pedidos.toArray();
-                await saveRemoteData({ tabla1stock: articles, tabla2Pedidos: currentOrders });
-                importStatus.textContent = `Se importaron ${articles.length} artículos.`;
-            } catch (err) {
-                console.error(err);
-                importStatus.textContent = 'Error al importar el archivo.';
+                pedidosCache = await fetchPedidos();
+            } catch (error) {
+                console.error(error);
+                errors.push(`PedidoMutuOfline: ${error.message}`);
+            }
+            if (errors.length) {
+                setStatus(`Conexión parcial. Stock: ${stockCache.length}. Pedidos: ${pedidosCache.length}. ${errors.join(' | ')}`, false);
+            } else {
+                setStatus(`Conectado. Stock: ${stockCache.length} artículos. Pedidos: ${pedidosCache.length}.`, true);
             }
         }
 
-        // Agregar una línea de pedido vacía
+        async function validatePedidoMapping(mapping) {
+            const columns = [mapping.ldap, mapping.tienda, mapping.cc, mapping.circuito, mapping.fecha, mapping.lineas, mapping.impreso, mapping.preparado].filter(Boolean);
+            await supabaseRequest(SUPABASE_CONFIG.pedidosTable, { query: selectQueryForColumns(columns) });
+        }
+
+        async function getWorkingPedidoMapping() {
+            if (activePedidoColumnMap) return activePedidoColumnMap;
+            const errors = [];
+            for (const mapping of PEDIDO_COLUMN_MAPPINGS) {
+                try {
+                    await validatePedidoMapping(mapping);
+                    activePedidoColumnMap = mapping;
+                    return mapping;
+                } catch (error) {
+                    errors.push(`${mapping.name}: ${error.message}`);
+                }
+            }
+            throw new Error(`No pude detectar las columnas de PedidoMutuOfline. Detalle: ${errors[0] || 'sin detalle'}`);
+        }
+
+        function pedidoToSupabaseRow(pedido, mapping) {
+            const row = {};
+            row[mapping.ldap] = pedido.ldap;
+            row[mapping.tienda] = pedido.tienda;
+            row[mapping.cc] = pedido.cc;
+            row[mapping.circuito] = pedido.circuito;
+            row[mapping.fecha] = pedido.fecha;
+            row[mapping.lineas] = pedido.lineas;
+            row[mapping.impreso] = pedido.impreso;
+            row[mapping.preparado] = pedido.preparado;
+            return row;
+        }
+
+        async function crearPedidoSupabase(pedido) {
+            const mapping = await getWorkingPedidoMapping();
+            const inserted = await supabaseRequest(SUPABASE_CONFIG.pedidosTable, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+                body: pedidoToSupabaseRow(pedido, mapping)
+            });
+            return Array.isArray(inserted) && inserted.length ? normalizePedidoRow(inserted[0]) : normalizePedidoRow(pedido);
+        }
+
         function addLine() {
             const tbody = document.querySelector('#lines-table tbody');
             const tr = document.createElement('tr');
@@ -328,20 +460,27 @@
                 <td><button type="button" class="delete-line-btn">Eliminar</button></td>
             `;
             tbody.appendChild(tr);
-
-            // Manejar eventos de la línea
             const refInput = tr.querySelector('.ref-input');
-            refInput.addEventListener('blur', () => {
-                buscarArticulo(refInput, tr);
-            });
-            tr.querySelector('.delete-line-btn').addEventListener('click', () => {
-                tr.remove();
-            });
+            refInput.addEventListener('blur', () => buscarArticulo(refInput, tr));
+            tr.querySelector('.delete-line-btn').addEventListener('click', () => tr.remove());
         }
 
-        // Buscar información del artículo a partir de la referencia y rellenar la fila
+        function sameText(a, b) {
+            return toText(a).toLowerCase() === toText(b).toLowerCase();
+        }
+
+        function calcularReservado(referencia, tienda) {
+            return pedidosCache.reduce((total, pedido) => {
+                if (pedido.preparado || !sameText(pedido.tienda, tienda)) return total;
+                return total + pedido.lineas.reduce((subtotal, linea) => {
+                    return sameText(linea.referencia, referencia) ? subtotal + toNumber(linea.cantSolicitada) : subtotal;
+                }, 0);
+            }, 0);
+        }
+
         async function buscarArticulo(refInput, row) {
             const referencia = refInput.value.trim();
+            const tienda = document.getElementById('tienda').value.trim();
             const designacionCell = row.querySelector('.designacion-cell');
             const seccionCell = row.querySelector('.seccion-cell');
             const cantDisponibleCell = row.querySelector('.cant-disponible-cell');
@@ -353,52 +492,38 @@
                 ubicacionesCell.textContent = '';
                 return;
             }
-            try {
-                // Obtener la tienda seleccionada en la cabecera. Para evitar
-                // problemas con mayúsculas/minúsculas, normalizamos a minúsculas.
-                const headerTienda = document.getElementById('tienda').value.trim().toLowerCase();
-                // Buscar primer artículo que coincida por referencia.
-                const article = await db.tabla1stock.where('referencia').equals(referencia).first();
-                // Si encontramos el artículo y la tienda coincide, rellenamos sus datos
-                if (article && article.tienda && article.tienda.toLowerCase() === headerTienda) {
-                    // Calcular la cantidad reservada en pedidos en curso de preparación
-                    let reserved = 0;
-                    try {
-                        const orders = await db.tabla2Pedidos.toArray();
-                        orders.forEach(order => {
-                            // Restar sólo los pedidos de la misma tienda que no estén marcados como preparados
-                            if (!order.preparado && order.tienda && order.tienda.toLowerCase() === headerTienda) {
-                                if (Array.isArray(order.lineas)) {
-                                    order.lineas.forEach(l => {
-                                        if (l.referencia && l.referencia.toString().trim() === referencia) {
-                                            reserved += Number(l.cantSolicitada) || 0;
-                                        }
-                                    });
-                                }
-                            }
-                        });
-                    } catch (e) {
-                        console.error('Error al calcular pedidos pendientes:', e);
-                    }
-                    // Calcular stock disponible descontando las reservas
-                    const available = Math.max(0, (Number(article.stockDisponible) || 0) - reserved);
-                    designacionCell.textContent = article.designacion;
-                    seccionCell.textContent = article.seccion;
-                    cantDisponibleCell.textContent = available;
-                    ubicacionesCell.textContent = article.ubicaciones;
-                } else {
-                    // Si no hay coincidencia exacta de tienda o artículo no existe, indicamos no encontrado
-                    designacionCell.textContent = 'No encontrado';
-                    seccionCell.textContent = '-';
-                    cantDisponibleCell.textContent = '0';
-                    ubicacionesCell.textContent = '';
-                }
-            } catch (err) {
-                console.error(err);
+            if (!tienda) {
+                designacionCell.textContent = 'Selecciona tienda';
+                seccionCell.textContent = '-';
+                cantDisponibleCell.textContent = '0';
+                ubicacionesCell.textContent = '';
+                return;
+            }
+            if (!stockCache.length) await cargarDatosSupabase();
+            const article = stockCache.find(item => sameText(item.referencia, referencia) && sameText(item.tienda, tienda));
+            if (!article) {
+                designacionCell.textContent = 'No encontrado';
+                seccionCell.textContent = '-';
+                cantDisponibleCell.textContent = '0';
+                ubicacionesCell.textContent = '';
+                return;
+            }
+            const reservado = calcularReservado(referencia, tienda);
+            const disponible = Math.max(0, toNumber(article.stockDisponible) - reservado);
+            designacionCell.textContent = article.designacion;
+            seccionCell.textContent = article.seccion;
+            cantDisponibleCell.textContent = disponible;
+            ubicacionesCell.textContent = article.ubicaciones;
+        }
+
+        async function recalcularLineas() {
+            const rows = Array.from(document.querySelectorAll('#lines-table tbody tr'));
+            for (const row of rows) {
+                const refInput = row.querySelector('.ref-input');
+                if (refInput && refInput.value.trim()) await buscarArticulo(refInput, row);
             }
         }
 
-        // Finalizar pedido: validar campos, guardar en tabla2Pedidos y limpiar formulario
         async function finalizarPedido() {
             const ldap = document.getElementById('ldap').value.trim();
             const tienda = document.getElementById('tienda').value.trim();
@@ -414,17 +539,24 @@
                 alert('Añade al menos una línea al pedido.');
                 return;
             }
-            // Construir líneas
             const lineas = [];
             for (const row of rows) {
                 const ref = row.querySelector('.ref-input').value.trim();
                 const designacion = row.querySelector('.designacion-cell').textContent.trim();
                 const seccion = row.querySelector('.seccion-cell').textContent.trim();
-                const cantSolicitada = Number(row.querySelector('.cant-solicitada-input').value) || 0;
-                const cantDisponible = Number(row.querySelector('.cant-disponible-cell').textContent) || 0;
+                const cantSolicitada = toNumber(row.querySelector('.cant-solicitada-input').value);
+                const cantDisponible = toNumber(row.querySelector('.cant-disponible-cell').textContent);
                 const ubicaciones = row.querySelector('.ubicaciones-cell').textContent.trim();
                 if (!ref) {
                     alert('Todas las líneas deben tener referencia.');
+                    return;
+                }
+                if (cantSolicitada <= 0) {
+                    alert('La cantidad solicitada debe ser mayor que cero.');
+                    return;
+                }
+                if (designacion === 'No encontrado' || designacion === 'Selecciona tienda') {
+                    alert(`La referencia ${ref} no está validada contra StockDispo.`);
                     return;
                 }
                 lineas.push({ referencia: ref, designacion, seccion, cantSolicitada, cantDisponible, ubicaciones });
@@ -436,62 +568,44 @@
                 circuito,
                 fecha: new Date().toISOString(),
                 lineas,
-                // Al crear un nuevo pedido marcamos impreso y preparado como false por defecto
                 impreso: false,
                 preparado: false
             };
             try {
-                await db.tabla2Pedidos.add(pedido);
-                // Sincronizar con la base remota: obtener stock actual y todos los pedidos
-                const currentStock = await db.tabla1stock.toArray();
-                const currentOrders = await db.tabla2Pedidos.toArray();
-                await saveRemoteData({ tabla1stock: currentStock, tabla2Pedidos: currentOrders });
-                alert('Pedido guardado correctamente.');
-                // Limpiar formulario y líneas
+                const finalizeBtn = document.getElementById('finalize-btn');
+                finalizeBtn.disabled = true;
+                finalizeBtn.textContent = 'Guardando...';
+                const created = await crearPedidoSupabase(pedido);
+                pedidosCache.unshift(created);
+                alert('Pedido guardado correctamente en Supabase.');
                 document.getElementById('ldap').value = '';
                 document.getElementById('tienda').value = '';
                 document.getElementById('cc').value = '';
                 document.getElementById('circuito').value = '';
                 tbody.innerHTML = '';
-            } catch (err) {
-                console.error(err);
-                alert('Error al guardar el pedido.');
+                setStatus(`Pedido creado. Pedidos en caché: ${pedidosCache.length}.`, true);
+            } catch (error) {
+                console.error(error);
+                alert(`Error al guardar el pedido: ${error.message}`);
+            } finally {
+                const finalizeBtn = document.getElementById('finalize-btn');
+                finalizeBtn.disabled = false;
+                finalizeBtn.textContent = 'Finalizar pedido';
             }
         }
 
-        // Ir a la página de ver pedidos
         function viewOrders() {
             window.open('ver_pedidos.html', '_blank');
         }
 
-        // Asignar eventos a los botones cuando la página esté lista
         window.addEventListener('DOMContentLoaded', () => {
-            // Cargar datos desde la base remota antes de inicializar los eventos
-            initializeFromRemote().then(() => {
-                // Asignar eventos a los botones una vez que se han sincronizado los datos
-                // La función importarStock se encargará de leer tanto el archivo local como la URL
-                document.getElementById('import-btn').addEventListener('click', importarStock);
-                document.getElementById('add-line-btn').addEventListener('click', addLine);
-                document.getElementById('finalize-btn').addEventListener('click', finalizarPedido);
-                document.getElementById('view-orders-btn').addEventListener('click', viewOrders);
-
-                // Establecemos un temporizador para actualizar automáticamente el stock local
-                // desde la base remota cada 10 minutos (600000 ms). De este modo, si el
-                // stock disponible se actualiza en la nube (por ejemplo, al importarlo desde
-                // otro dispositivo), el cliente sincronizará periódicamente la tabla1stock.
-                const REFRESH_INTERVAL_MS = 600000; // 10 minutos
-                setInterval(async () => {
-                    try {
-                        const remoteData = await fetchRemoteData();
-                        if (remoteData && remoteData.tabla1stock) {
-                            await db.tabla1stock.clear();
-                            await db.tabla1stock.bulkAdd(remoteData.tabla1stock);
-                        }
-                    } catch (err) {
-                        console.error('Error al actualizar stock desde la nube:', err);
-                    }
-                }, REFRESH_INTERVAL_MS);
-            });
+            document.getElementById('refresh-data-btn').addEventListener('click', cargarDatosSupabase);
+            document.getElementById('add-line-btn').addEventListener('click', addLine);
+            document.getElementById('finalize-btn').addEventListener('click', finalizarPedido);
+            document.getElementById('view-orders-btn').addEventListener('click', viewOrders);
+            document.getElementById('tienda').addEventListener('change', recalcularLineas);
+            cargarDatosSupabase();
+            setInterval(cargarDatosSupabase, REFRESH_INTERVAL_MS);
         });
     </script>
 </body>
