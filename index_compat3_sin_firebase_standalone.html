@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>ProdTracker Mobile - Local</title>
+  <style>
+    :root {
+      --bg: #e2e8f0;
+      --panel: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --blue: #2563eb;
+      --blue2: #1d4ed8;
+      --red: #dc2626;
+      --green: #16a34a;
+      --amber: #f59e0b;
+      --slate: #1e293b;
+      --soft: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      min-height: 100vh;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; border: 0; }
+    .shell {
+      min-height: 100vh;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      padding: 0;
+    }
+    .phone {
+      width: 100%;
+      max-width: 460px;
+      min-height: 100vh;
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, .22);
+      overflow: hidden;
+    }
+    @media (min-width: 768px) {
+      .shell { padding: 18px; align-items: center; }
+      .phone { min-height: 850px; height: 850px; border-radius: 32px; border: 1px solid #cbd5e1; }
+    }
+    .topbar {
+      background: #0f172a;
+      color: #fff;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 4px 14px rgba(15,23,42,.25);
+      flex: 0 0 auto;
+    }
+    .brand { display: flex; gap: 10px; align-items: center; }
+    .logo { background: var(--blue); padding: 8px; border-radius: 11px; line-height: 1; }
+    .brand h1 { margin: 0; font-size: 15px; line-height: 1.1; }
+    .brand p { margin: 3px 0 0; color: #94a3b8; font-size: 11px; font-family: monospace; }
+    .status { display: flex; align-items: center; gap: 7px; border: 1px solid #166534; background: rgba(22,101,52,.28); padding: 5px 9px; border-radius: 999px; font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    .dot { width: 8px; height: 8px; background: #4ade80; border-radius: 50%; }
+    main { flex: 1 1 auto; overflow-y: auto; background: #f1f5f9; padding: 16px; }
+    .nav { border-top: 1px solid var(--line); background: #fff; display: grid; grid-template-columns: repeat(4, 1fr); flex: 0 0 auto; }
+    .nav button { background: #fff; color: #64748b; padding: 11px 3px; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 800; min-height: 62px; position: relative; }
+    .nav button.active { color: var(--blue); background: #eff6ff; }
+    .nav .ico { font-size: 18px; line-height: 1; }
+    .badge { display:inline-block; background: var(--red); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 999px; line-height: 1.4; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 22px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(15,23,42,.06); }
+    .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+    .row.start { align-items: flex-start; }
+    h2 { margin: 0; font-size: 21px; line-height: 1.15; }
+    h3 { margin: 0; font-size: 17px; line-height: 1.2; }
+    .small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+    .tiny { color: var(--muted); font-size: 10px; }
+    .btn { border-radius: 14px; padding: 12px 14px; font-weight: 900; text-align: center; background: #e2e8f0; color: #0f172a; }
+    .btn.primary { background: var(--blue); color: #fff; }
+    .btn.primary:active { background: var(--blue2); }
+    .btn.danger { background: var(--red); color: #fff; }
+    .btn.green { background: var(--green); color: #fff; }
+    .btn.white { background: #fff; color: #334155; border: 1px solid #cbd5e1; }
+    .btn.full { width: 100%; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .empty { min-height: 48vh; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; text-align: center; padding: 30px; }
+    .empty .big { font-size: 52px; margin-bottom: 12px; }
+    .timer { font-family: Consolas, Monaco, monospace; font-weight: 900; color: var(--blue); font-size: 20px; white-space: nowrap; }
+    .chipbox { background: var(--soft); border: 1px solid #e2e8f0; border-radius: 13px; padding: 9px; font-size: 12px; color: #475569; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+    .chip { font-size: 10px; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; padding: 5px 8px; border-radius: 999px; }
+    .field { margin-bottom: 14px; }
+    label { display: block; font-size: 12px; font-weight: 900; color: #334155; margin-bottom: 7px; }
+    input[type="text"], input[type="number"] { width: 100%; border: 1px solid #cbd5e1; border-radius: 14px; padding: 12px; outline: none; background: #fff; color: #0f172a; }
+    input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+    .checks { display: grid; gap: 8px; }
+    .check { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; padding: 11px; color: #334155; font-size: 13px; font-weight: 700; }
+    .check input { width: 18px; height: 18px; }
+    .mutedbar { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 11px; border-radius: 14px; color: #64748b; font-size: 12px; }
+    .history-item { border-left: 4px solid var(--blue); }
+    .metric { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px; }
+    .metric b { display:block; font-size: 18px; }
+    .modal-back {
+      position: fixed; inset: 0; background: rgba(15, 23, 42, .58);
+      display: none; align-items: center; justify-content: center; padding: 18px; z-index: 30;
+    }
+    .modal-back.show { display: flex; }
+    .modal { width: 100%; max-width: 420px; background: #fff; border-radius: 24px; padding: 18px; box-shadow: 0 24px 80px rgba(15,23,42,.35); }
+    .modal h2 { margin-bottom: 6px; }
+    .hidden { display: none !important; }
+    .list-row { display:flex; gap: 8px; justify-content:space-between; align-items:center; padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
+    .list-row:last-child { border-bottom: 0; }
+    .pill { border-radius: 999px; background:#e0f2fe; color:#0369a1; padding:3px 8px; font-size: 10px; font-weight: 900; }
+    .alert { background: #fef3c7; color:#92400e; border:1px solid #fde68a; border-radius: 14px; padding: 10px; font-size: 12px; margin-bottom: 14px; }
+    .errorbox { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; border-radius: 14px; padding: 12px; margin: 14px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="phone">
+      <header class="topbar">
+        <div class="brand">
+          <div class="logo">📦</div>
+          <div>
+            <h1>ProdTracker</h1>
+            <p>v2.2 Local · Sin Firebase</p>
+          </div>
+        </div>
+        <div class="status"><span class="dot"></span><span>Local</span></div>
+      </header>
+      <main id="app"></main>
+      <nav class="nav" id="nav"></nav>
+    </div>
+  </div>
+
+  <div id="finishModal" class="modal-back">
+    <div class="modal">
+      <h2>Finalizar tarea</h2>
+      <p class="small" id="finishInfo"></p>
+      <div class="field" style="margin-top:14px">
+        <label for="finishUnits">Unidades procesadas</label>
+        <input id="finishUnits" type="number" min="0" step="1" placeholder="Ej. 24" />
+      </div>
+      <div class="grid2">
+        <button class="btn white" id="finishCancel">Cancelar</button>
+        <button class="btn green" id="finishConfirm">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    'use strict';
+
+    const STORAGE_KEYS = {
+      operarios: 'prodtracker_operarios_list',
+      activeTasks: 'prodtracker_active_tasks',
+      history: 'prodtracker_history'
+    };
+
+    const DEFAULT_OPERARIOS_LISTA = [
+      'Dani Campins', 'Iara Celeste', 'ivan Riera', 'Juan Antonio Jimenez',
+      'Jhon Valencia', 'Carlos Diaz', 'Emerson', 'Jose', 'luis', 'Juan Guzman',
+      'Adrian Gonzalez', 'JavierPerez', 'Marcelo Curiqueo', 'Eugenia Berrio',
+      'Javier Pastor', 'Juan Moreno Porras', 'MAXI Curiqueo', 'Melchor',
+      'JAIME REYES', 'DanielMoreno', 'op006', 'JpNave'
+    ];
+
+    const OPERACIONES_LISTA = [
+      'Carga de palet',
+      'Constituir palets en SD y ubicar palet SD',
+      'Control y ubicación de PC',
+      'Descarga de palet',
+      'Desubicación de palet SD',
+      'Expedición de PC a Transporte-Retirada',
+      'Lay Out',
+      'Preparación desde SD a PC',
+      'Otras Operaciones'
+    ];
+
+    const OBJETIVOS_MAP = {
+      'Carga de palet': 24,
+      'Constituir palets en SD y ubicar palet SD': 10,
+      'Control y ubicación de PC': 24,
+      'Descarga de palet': 24,
+      'Desubicación de palet SD': 21,
+      'Expedición de PC a Transporte-Retirada': 8,
+      'Preparación desde SD a PC': 9,
+      'Lay Out': 0,
+      'Stock Controller': 0,
+      'Otras Operaciones': 0
+    };
+
+    let state = {
+      view: 'dashboard',
+      now: Date.now(),
+      activeTasks: safeRead(STORAGE_KEYS.activeTasks, []),
+      history: safeRead(STORAGE_KEYS.history, []),
+      operariosList: safeRead(STORAGE_KEYS.operarios, DEFAULT_OPERARIOS_LISTA),
+      finishingTaskId: null
+    };
+
+    function $(id) { return document.getElementById(id); }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function safeRead(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return clone(fallback);
+        const parsed = JSON.parse(raw);
+        return parsed == null ? clone(fallback) : parsed;
+      } catch (err) {
+        console.error('No se pudo leer localStorage:', key, err);
+        return clone(fallback);
+      }
+    }
+
+    function clone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function safeWrite(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+        return true;
+      } catch (err) {
+        alert('No se pudo guardar en este navegador. Revisa si está lleno o en modo privado.');
+        console.error('No se pudo guardar localStorage:', key, err);
+        return false;
+      }
+    }
+
+    function persist() {
+      safeWrite(STORAGE_KEYS.activeTasks, state.activeTasks);
+      safeWrite(STORAGE_KEYS.history, state.history);
+      safeWrite(STORAGE_KEYS.operarios, state.operariosList);
+    }
+
+    function uid() {
+      return 't_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+    }
+
+    function formatTime(ms) {
+      if (!Number.isFinite(ms) || ms < 0) ms = 0;
+      const totalSeconds = Math.floor(ms / 1000);
+      const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+      const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+      const s = String(totalSeconds % 60).padStart(2, '0');
+      return h + ':' + m + ':' + s;
+    }
+
+    function formatDateTime(ms) {
+      try { return new Date(ms).toLocaleString('es-ES'); }
+      catch (_) { return ''; }
+    }
+
+    function formatNumber(n) {
+      const num = Number(n);
+      if (!Number.isFinite(num)) return '0';
+      return num.toLocaleString('es-ES', { maximumFractionDigits: 2 });
+    }
+
+    function setView(view) {
+      state.view = view;
+      render();
+    }
+
+    function renderNav() {
+      const items = [
+        { id: 'dashboard', label: 'Activas', icon: '⏱' },
+        { id: 'new-task', label: 'Nueva', icon: '+' },
+        { id: 'history', label: 'Historial', icon: '📊' },
+        { id: 'operarios', label: 'Operarios', icon: '👥' }
+      ];
+      $('nav').innerHTML = items.map(item => {
+        const badge = item.id === 'dashboard' && state.activeTasks.length > 0
+          ? '<span class="badge">' + state.activeTasks.length + '</span>' : '';
+        return '<button data-nav="' + item.id + '" class="' + (state.view === item.id ? 'active' : '') + '">' +
+          '<span class="ico">' + item.icon + '</span><span>' + item.label + '</span>' + badge + '</button>';
+      }).join('');
+      document.querySelectorAll('[data-nav]').forEach(btn => {
+        btn.addEventListener('click', () => setView(btn.getAttribute('data-nav')));
+      });
+    }
+
+    function render() {
+      renderNav();
+      const app = $('app');
+      if (state.view === 'dashboard') app.innerHTML = viewDashboard();
+      if (state.view === 'new-task') app.innerHTML = viewNewTask();
+      if (state.view === 'history') app.innerHTML = viewHistory();
+      if (state.view === 'operarios') app.innerHTML = viewOperarios();
+      bindEvents();
+    }
+
+    function viewDashboard() {
+      let html = '';
+      html += '<div class="card"><div class="row start"><div><h2>Tareas activas</h2>' +
+        '<p class="small">Control de productividad guardado solo en este dispositivo.</p></div>' +
+        '<button class="btn primary" id="goNew">+ Nueva</button></div></div>';
+      if (!state.activeTasks.length) {
+        html += '<div class="empty"><div class="big">📋</div><h3>No hay tareas activas</h3>' +
+          '<p class="small">Pulsa “Nueva” para iniciar una operación.</p></div>';
+        return html;
+      }
+      state.activeTasks.forEach(task => {
+        const elapsed = state.now - Number(task.startTime || state.now);
+        const ops = Array.isArray(task.operaciones) ? task.operaciones : [];
+        const operarios = Array.isArray(task.operarios) ? task.operarios : [];
+        const mainOp = ops[0] || 'Operación';
+        const target = OBJETIVOS_MAP[mainOp] || 0;
+        html += '<div class="card">' +
+          '<div class="row start"><div><h3>' + escapeHtml(mainOp) + '</h3>' +
+          '<p class="small">' + escapeHtml(operarios.join(' · ') || 'Sin operario') + '</p></div>' +
+          '<div style="text-align:right"><div class="timer">' + formatTime(elapsed) + '</div>' +
+          '<div class="tiny">Objetivo: ' + (target || '-') + ' uds/h</div></div></div>';
+        if (task.reference) {
+          html += '<div class="chipbox" style="margin-top:10px">Ref/Lote: <b>' + escapeHtml(task.reference) + '</b></div>';
+        }
+        if (ops.length > 1) {
+          html += '<div class="chips">' + ops.slice(1).map(op => '<span class="chip">' + escapeHtml(op) + '</span>').join('') + '</div>';
+        }
+        html += '<div class="grid2" style="margin-top:12px">' +
+          '<button class="btn white" data-cancel="' + escapeHtml(task.id) + '">Cancelar</button>' +
+          '<button class="btn green" data-finish="' + escapeHtml(task.id) + '">Finalizar</button>' +
+          '</div></div>';
+      });
+      return html;
+    }
+
+    function viewNewTask() {
+      return '<div class="card"><h2>Nueva tarea</h2><p class="small">Selecciona operario y operación para iniciar el contador.</p></div>' +
+        '<div class="card">' +
+        '<div class="field"><label>Operarios</label><div class="checks" id="operariosChecks">' +
+        state.operariosList.map((name, idx) => '<label class="check"><input type="checkbox" name="operarios" value="' + escapeHtml(name) + '"> <span>' + escapeHtml(name) + '</span></label>').join('') +
+        '</div></div>' +
+        '<div class="field"><label>Operaciones</label><div class="checks" id="opsChecks">' +
+        OPERACIONES_LISTA.map(op => '<label class="check"><input type="checkbox" name="operaciones" value="' + escapeHtml(op) + '"> <span>' + escapeHtml(op) + '</span></label>').join('') +
+        '</div></div>' +
+        '<div class="field"><label for="reference">Referencia / lote / comentario</label><input id="reference" type="text" placeholder="Opcional"></div>' +
+        '<div class="grid2"><button class="btn white" id="cancelNew">Cancelar</button><button class="btn primary" id="startTask">Iniciar</button></div>' +
+        '</div>';
+    }
+
+    function viewHistory() {
+      let html = '<div class="card"><div class="row start"><div><h2>Historial</h2>' +
+        '<p class="small">Registros finalizados y guardados en este navegador.</p></div>' +
+        '<span class="pill">' + state.history.length + '</span></div></div>' +
+        '<div class="alert">Esta versión no usa nube. Para conservar copia, exporta CSV o JSON antes de borrar datos del navegador.</div>' +
+        '<div class="grid2" style="margin-bottom:14px"><button class="btn white" id="downloadCSV">Descargar CSV</button><button class="btn white" id="exportJSON">Exportar JSON</button></div>' +
+        '<div class="grid2" style="margin-bottom:14px"><button class="btn white" id="importJSONBtn">Importar JSON</button><button class="btn danger" id="clearHistory">Borrar historial</button></div>' +
+        '<input id="jsonFile" class="hidden" type="file" accept="application/json,.json">';
+      if (!state.history.length) {
+        html += '<div class="empty"><div class="big">📊</div><h3>Sin historial</h3><p class="small">Cuando finalices tareas aparecerán aquí.</p></div>';
+        return html;
+      }
+      state.history.slice().sort((a,b) => (b.endTime || 0) - (a.endTime || 0)).forEach(item => {
+        const elapsedMs = Math.max(0, Number(item.endTime || 0) - Number(item.startTime || 0));
+        const hours = elapsedMs / 3600000;
+        const units = Number(item.units || 0);
+        const rate = hours > 0 ? units / hours : 0;
+        const mainOp = (item.operaciones && item.operaciones[0]) || 'Operación';
+        html += '<div class="card history-item"><div class="row start"><div><h3>' + escapeHtml(mainOp) + '</h3>' +
+          '<p class="small">' + escapeHtml((item.operarios || []).join(' · ') || 'Sin operario') + '</p>' +
+          '<p class="tiny">' + escapeHtml(formatDateTime(item.endTime)) + '</p></div>' +
+          '<div style="text-align:right"><div class="timer">' + escapeHtml(formatTime(elapsedMs)) + '</div></div></div>' +
+          '<div class="grid2" style="margin-top:12px"><div class="metric"><span class="tiny">Unidades</span><b>' + formatNumber(units) + '</b></div>' +
+          '<div class="metric"><span class="tiny">Uds/h</span><b>' + formatNumber(rate) + '</b></div></div>';
+        if (item.reference) html += '<div class="chipbox" style="margin-top:10px">Ref/Lote: <b>' + escapeHtml(item.reference) + '</b></div>';
+        html += '</div>';
+      });
+      return html;
+    }
+
+    function viewOperarios() {
+      return '<div class="card"><h2>Operarios</h2><p class="small">Lista local de operarios. Se guarda en este navegador.</p></div>' +
+        '<div class="card"><div class="field"><label for="newOperario">Añadir operario</label><input id="newOperario" type="text" placeholder="Nombre del operario"></div>' +
+        '<button class="btn primary full" id="addOperario">Añadir</button></div>' +
+        '<div class="card"><h3>Listado</h3>' +
+        (state.operariosList.length ? state.operariosList.map((name, idx) => '<div class="list-row"><span>' + escapeHtml(name) + '</span><button class="btn danger" style="padding:8px 10px" data-remove-op="' + idx + '">Borrar</button></div>').join('') : '<p class="small">No hay operarios.</p>') +
+        '<button class="btn white full" style="margin-top:12px" id="resetOperarios">Restaurar lista inicial</button></div>';
+    }
+
+    function bindEvents() {
+      const goNew = $('goNew');
+      if (goNew) goNew.addEventListener('click', () => setView('new-task'));
+      const cancelNew = $('cancelNew');
+      if (cancelNew) cancelNew.addEventListener('click', () => setView('dashboard'));
+      const startTask = $('startTask');
+      if (startTask) startTask.addEventListener('click', addNewTask);
+
+      document.querySelectorAll('[data-finish]').forEach(btn => btn.addEventListener('click', () => openFinish(btn.getAttribute('data-finish'))));
+      document.querySelectorAll('[data-cancel]').forEach(btn => btn.addEventListener('click', () => cancelTask(btn.getAttribute('data-cancel'))));
+      document.querySelectorAll('[data-remove-op]').forEach(btn => btn.addEventListener('click', () => removeOperario(Number(btn.getAttribute('data-remove-op')))));
+
+      const addOperario = $('addOperario');
+      if (addOperario) addOperario.addEventListener('click', addOperarioFn);
+      const newOperario = $('newOperario');
+      if (newOperario) newOperario.addEventListener('keydown', e => { if (e.key === 'Enter') addOperarioFn(); });
+      const resetOperarios = $('resetOperarios');
+      if (resetOperarios) resetOperarios.addEventListener('click', resetOperariosFn);
+
+      const downloadCSV = $('downloadCSV');
+      if (downloadCSV) downloadCSV.addEventListener('click', downloadCSVFn);
+      const exportJSON = $('exportJSON');
+      if (exportJSON) exportJSON.addEventListener('click', exportJSONFn);
+      const importJSONBtn = $('importJSONBtn');
+      if (importJSONBtn) importJSONBtn.addEventListener('click', () => $('jsonFile').click());
+      const jsonFile = $('jsonFile');
+      if (jsonFile) jsonFile.addEventListener('change', e => importJSONFn(e.target.files && e.target.files[0]));
+      const clearHistory = $('clearHistory');
+      if (clearHistory) clearHistory.addEventListener('click', clearHistoryFn);
+    }
+
+    function checkedValues(name) {
+      return Array.from(document.querySelectorAll('input[name="' + name + '"]:checked')).map(el => el.value);
+    }
+
+    function addNewTask() {
+      const operarios = checkedValues('operarios');
+      const operaciones = checkedValues('operaciones');
+      const reference = ($('reference') && $('reference').value || '').trim();
+      if (!operarios.length) { alert('Selecciona al menos un operario.'); return; }
+      if (!operaciones.length) { alert('Selecciona al menos una operación.'); return; }
+      state.activeTasks.push({
+        id: uid(),
+        operarios: operarios,
+        operaciones: operaciones,
+        reference: reference,
+        startTime: Date.now()
+      });
+      state.view = 'dashboard';
+      persist();
+      render();
+    }
+
+    function cancelTask(id) {
+      if (!confirm('¿Cancelar esta tarea activa? No irá al historial.')) return;
+      state.activeTasks = state.activeTasks.filter(t => t.id !== id);
+      persist();
+      render();
+    }
+
+    function openFinish(id) {
+      const task = state.activeTasks.find(t => t.id === id);
+      if (!task) return;
+      state.finishingTaskId = id;
+      $('finishUnits').value = '';
+      const elapsed = Date.now() - Number(task.startTime || Date.now());
+      $('finishInfo').innerHTML = '<b>' + escapeHtml((task.operaciones && task.operaciones[0]) || 'Operación') + '</b><br>' +
+        escapeHtml((task.operarios || []).join(' · ')) + '<br>Tiempo: ' + escapeHtml(formatTime(elapsed));
+      $('finishModal').classList.add('show');
+      setTimeout(() => $('finishUnits').focus(), 50);
+    }
+
+    function closeFinish() {
+      state.finishingTaskId = null;
+      $('finishModal').classList.remove('show');
+    }
+
+    function confirmFinish() {
+      const task = state.activeTasks.find(t => t.id === state.finishingTaskId);
+      if (!task) { closeFinish(); return; }
+      const units = Number($('finishUnits').value || 0);
+      if (!Number.isFinite(units) || units < 0) { alert('Introduce unidades válidas.'); return; }
+      const endTime = Date.now();
+      const finished = Object.assign({}, task, { endTime: endTime, units: units });
+      state.history.push(finished);
+      state.activeTasks = state.activeTasks.filter(t => t.id !== task.id);
+      closeFinish();
+      persist();
+      render();
+    }
+
+    $('finishCancel').addEventListener('click', closeFinish);
+    $('finishConfirm').addEventListener('click', confirmFinish);
+    $('finishModal').addEventListener('click', e => { if (e.target === $('finishModal')) closeFinish(); });
+
+    function addOperarioFn() {
+      const input = $('newOperario');
+      const name = (input && input.value || '').trim();
+      if (!name) { alert('Escribe el nombre del operario.'); return; }
+      if (state.operariosList.some(x => x.toLowerCase() === name.toLowerCase())) { alert('Ese operario ya existe.'); return; }
+      state.operariosList.push(name);
+      state.operariosList.sort((a,b) => a.localeCompare(b, 'es'));
+      persist();
+      render();
+    }
+
+    function removeOperario(idx) {
+      const name = state.operariosList[idx];
+      if (!name) return;
+      if (!confirm('¿Borrar operario "' + name + '"?')) return;
+      state.operariosList.splice(idx, 1);
+      persist();
+      render();
+    }
+
+    function resetOperariosFn() {
+      if (!confirm('¿Restaurar la lista inicial de operarios?')) return;
+      state.operariosList = clone(DEFAULT_OPERARIOS_LISTA);
+      persist();
+      render();
+    }
+
+    function csvEscape(value) {
+      const s = String(value == null ? '' : value);
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+
+    function downloadCSVFn() {
+      if (!state.history.length) { alert('No hay historial para exportar.'); return; }
+      const headers = ['Fecha inicio','Fecha fin','Operarios','Operaciones','Referencia','Tiempo','Unidades','Uds/h'];
+      const rows = state.history.map(item => {
+        const elapsedMs = Math.max(0, Number(item.endTime || 0) - Number(item.startTime || 0));
+        const hours = elapsedMs / 3600000;
+        const units = Number(item.units || 0);
+        const rate = hours > 0 ? units / hours : 0;
+        return [
+          formatDateTime(item.startTime),
+          formatDateTime(item.endTime),
+          (item.operarios || []).join(' · '),
+          (item.operaciones || []).join(' · '),
+          item.reference || '',
+          formatTime(elapsedMs),
+          units,
+          rate.toFixed(2).replace('.', ',')
+        ];
+      });
+      const csv = [headers].concat(rows).map(row => row.map(csvEscape).join(';')).join('\n');
+      downloadBlob(csv, 'prodtracker_historial.csv', 'text/csv;charset=utf-8');
+    }
+
+    function exportJSONFn() {
+      const data = {
+        exportedAt: new Date().toISOString(),
+        activeTasks: state.activeTasks,
+        history: state.history,
+        operariosList: state.operariosList
+      };
+      downloadBlob(JSON.stringify(data, null, 2), 'prodtracker_copia_local.json', 'application/json;charset=utf-8');
+    }
+
+    function importJSONFn(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function () {
+        try {
+          const data = JSON.parse(String(reader.result || '{}'));
+          if (Array.isArray(data.activeTasks)) state.activeTasks = data.activeTasks;
+          if (Array.isArray(data.history)) state.history = data.history;
+          if (Array.isArray(data.operariosList)) state.operariosList = data.operariosList;
+          persist();
+          render();
+          alert('Copia importada correctamente.');
+        } catch (err) {
+          console.error(err);
+          alert('No se pudo importar el JSON.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function clearHistoryFn() {
+      if (!state.history.length) { alert('No hay historial que borrar.'); return; }
+      if (!confirm('¿Seguro que quieres borrar todo el historial local?')) return;
+      state.history = [];
+      persist();
+      render();
+    }
+
+    function downloadBlob(content, filename, type) {
+      const blob = new Blob([content], { type: type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    window.addEventListener('error', function (event) {
+      const app = $('app');
+      if (app && !app.innerHTML.trim()) {
+        app.innerHTML = '<div class="errorbox"><b>No se pudo iniciar la app.</b>\n' + escapeHtml(event.message || event.error || 'Error desconocido') + '</div>';
+      }
+    });
+
+    setInterval(function () {
+      state.now = Date.now();
+      if (state.view === 'dashboard' && state.activeTasks.length) render();
+      if (state.finishingTaskId) {
+        const task = state.activeTasks.find(t => t.id === state.finishingTaskId);
+        if (task) {
+          const elapsed = Date.now() - Number(task.startTime || Date.now());
+          $('finishInfo').innerHTML = '<b>' + escapeHtml((task.operaciones && task.operaciones[0]) || 'Operación') + '</b><br>' +
+            escapeHtml((task.operarios || []).join(' · ')) + '<br>Tiempo: ' + escapeHtml(formatTime(elapsed));
+        }
+      }
+    }, 1000);
+
+    render();
+  })();
+  </script>
+</body>
+</html>
