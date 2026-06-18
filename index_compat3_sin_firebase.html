@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ProdTracker Mobile - Sin Firebase</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-200">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // --- CONFIGURACIÓN LOCAL, SIN FIREBASE ---
+    // Esta versión no usa Firebase, Auth ni Firestore.
+    // Los datos se guardan en el navegador con localStorage.
+    const STORAGE_KEYS = {
+      operarios: 'prodtracker_operarios_list',
+      activeTasks: 'prodtracker_active_tasks',
+      history: 'prodtracker_history'
+    };
+
+    const DEFAULT_OPERARIOS_LISTA = [
+      'Dani Campins',
+      'Iara Celeste',
+      'ivan Riera',
+      'Juan Antonio Jimenez',
+      'Jhon Valencia',
+      'Carlos Diaz',
+      'Emerson',
+      'Jose',
+      'luis',
+      'Juan Guzman',
+      'Adrian Gonzalez',
+      'JavierPerez',
+      'Marcelo Curiqueo',
+      'Eugenia Berrio',
+      'Javier Pastor',
+      'Juan Moreno Porras',
+      'MAXI Curiqueo',
+      'Melchor',
+      'JAIME REYES',
+      'DanielMoreno',
+      'op006',
+      'JpNave'
+    ];
+
+    const OPERACIONES_LISTA = [
+      'Carga de palet',
+      'Constituir palets en SD y ubicar palet SD',
+      'Control y ubicación de PC',
+      'Descarga de palet',
+      'Desubicación de palet SD',
+      'Expedición de PC a Transporte-Retirada',
+      'Lay Out',
+      'Preparación desde SD a PC',
+      'Otras Operaciones'
+    ];
+
+    const OBJETIVOS_MAP = {
+      'Carga de palet': 24,
+      'Constituir palets en SD y ubicar palet SD': 10,
+      'Control y ubicación de PC': 24,
+      'Descarga de palet': 24,
+      'Desubicación de palet SD': 21,
+      'Expedición de PC a Transporte-Retirada': 8,
+      'Preparación desde SD a PC': 9,
+      'Lay Out': 0,
+      'Stock Controller': 0,
+      'Otras Operaciones': 0
+    };
+
+    function safeRead(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return fallback;
+        const parsed = JSON.parse(raw);
+        return parsed ?? fallback;
+      } catch (err) {
+        console.error('No se pudo leer localStorage:', key, err);
+        return fallback;
+      }
+    }
+
+    function safeWrite(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+        return true;
+      } catch (err) {
+        console.error('No se pudo guardar localStorage:', key, err);
+        return false;
+      }
+    }
+
+    function formatTime(ms) {
+      if (!Number.isFinite(ms) || ms < 0) ms = 0;
+      const totalSeconds = Math.floor(ms / 1000);
+      const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+      const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+      const s = (totalSeconds % 60).toString().padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    function formatDateTime(ms) {
+      try {
+        return new Date(ms).toLocaleString();
+      } catch {
+        return '';
+      }
+    }
+
+    function TopBar({ view, setView }) {
+      return (
+        <div className="bg-slate-900 p-4 text-white shrink-0 flex justify-between items-center z-20 shadow-md">
+          <div className="flex items-center gap-2.5">
+            <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-900/50">
+              <span>📦</span>
+            </div>
+            <div>
+              <h1 className="font-bold text-sm leading-tight tracking-wide">ProdTracker</h1>
+              <p className="text-[10px] text-slate-400 font-mono">v2.1 Local · Sin Firebase</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 px-2 py-1 rounded-full border bg-green-900/30 border-green-800">
+            <span className="w-2 h-2 rounded-full bg-green-400"></span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Local</span>
+          </div>
+        </div>
+      );
+    }
+
+    function BottomNav({ view, setView, activeTasks }) {
+      const items = [
+        { id: 'dashboard', label: 'Activas', icon: '⏱' },
+        { id: 'new-task', label: 'Nueva', icon: '+' },
+        { id: 'history', label: 'Historial', icon: '📊' },
+        { id: 'operarios', label: 'Operarios', icon: '👥' }
+      ];
+      return (
+        <div className="border-t bg-white grid grid-cols-4 shrink-0">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setView(item.id)}
+              className={`py-3 text-xs font-bold flex flex-col items-center gap-1 ${view === item.id ? 'text-blue-600 bg-blue-50' : 'text-slate-500'}`}
+            >
+              <span className="text-lg leading-none">{item.icon}</span>
+              <span>{item.label}</span>
+              {item.id === 'dashboard' && activeTasks.length > 0 && (
+                <span className="text-[10px] bg-red-600 text-white rounded-full px-1.5">{activeTasks.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    function DashboardView({ activeTasks, now, onFinish, onCancel, setView }) {
+      return (
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-100">
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
+            <div className="flex justify-between items-start gap-3">
+              <div>
+                <h2 className="text-lg font-black text-slate-900">Tareas activas</h2>
+                <p className="text-xs text-slate-500">Control de productividad guardado en este dispositivo.</p>
+              </div>
+              <button
+                onClick={() => setView('new-task')}
+                className="px-4 py-2 rounded-xl bg-blue-600 text-white font-bold shadow-sm active:bg-blue-700"
+              >
+                + Nueva
+              </button>
+            </div>
+          </div>
+
+          {activeTasks.length === 0 ? (
+            <div className="h-[55vh] flex flex-col items-center justify-center text-center text-slate-400 px-8">
+              <div className="text-5xl mb-4">📋</div>
+              <h3 className="font-bold text-slate-600">No hay tareas activas</h3>
+              <p className="text-sm mt-1">Pulsa “Nueva” para iniciar una operación.</p>
+            </div>
+          ) : (
+            activeTasks.map((task) => {
+              const elapsed = now - task.startTime;
+              const mainOp = task.operaciones?.[0] || 'Operación';
+              const target = OBJETIVOS_MAP[mainOp] || 0;
+              return (
+                <div key={task.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-3">
+                  <div className="flex justify-between items-start gap-3">
+                    <div>
+                      <h3 className="font-black text-slate-900 leading-tight">{mainOp}</h3>
+                      <p className="text-xs text-slate-500 mt-1">{task.operarios?.join(' · ') || 'Sin operario'}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-mono font-black text-blue-700">{formatTime(elapsed)}</div>
+                      <div className="text-[10px] text-slate-400">Objetivo: {target || '-'} uds/h</div>
+                    </div>
+                  </div>
+
+                  {task.reference && (
+                    <div className="bg-slate-50 rounded-xl p-2 text-xs text-slate-600 border border-slate-100">
+                      Ref/Lote: <b>{task.reference}</b>
+                    </div>
+                  )}
+
+                  {task.operaciones?.length > 1 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {task.operaciones.slice(1).map((op) => (
+                        <span key={op} className="text-[10px] bg-slate-100 text-slate-600 rounded-full px-2 py-1 border border-slate-200">{op}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    <button
+                      onClick={() => onCancel(task.id)}
+                      className="py-3 rounded-xl bg-red-50 text-red-700 font-bold border border-red-200 active:bg-red-100"
+                    >
+                      Borrar
+                    </button>
+                    <button
+                      onClick={() => onFinish(task)}
+                      className="py-3 rounded-xl bg-slate-900 text-white font-bold active:bg-slate-800"
+                    >
+                      Finalizar
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      );
+    }
+
+    function NewTaskView({ operariosList, onStart, onCancel }) {
+      const [selectedOps, setSelectedOps] = useState([]);
+      const [selectedUsers, setSelectedUsers] = useState([]);
+      const [reference, setReference] = useState('');
+      const [searchOperario, setSearchOperario] = useState('');
+
+      const filteredOperarios = operariosList.filter((name) =>
+        name.toLowerCase().includes(searchOperario.toLowerCase())
+      );
+
+      const toggle = (value, list, setter) => {
+        setter(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
+      };
+
+      const start = () => {
+        if (selectedUsers.length === 0) {
+          alert('Selecciona al menos un operario.');
+          return;
+        }
+        if (selectedOps.length === 0) {
+          alert('Selecciona al menos una operación.');
+          return;
+        }
+        onStart({
+          operarios: selectedUsers,
+          operaciones: selectedOps,
+          reference: reference.trim()
+        });
+      };
+
+      return (
+        <div className="flex-1 overflow-y-auto bg-white">
+          <div className="p-4 border-b flex justify-between items-center bg-slate-50 sticky top-0 z-10">
+            <h2 className="font-bold text-lg">Nueva tarea</h2>
+            <button onClick={onCancel} className="text-sm font-bold text-blue-600 bg-white border border-blue-200 px-3 py-1.5 rounded-lg">Cerrar</button>
+          </div>
+
+          <div className="p-4 space-y-5">
+            <div>
+              <label className="block text-xs font-black text-slate-400 uppercase mb-2">Operarios</label>
+              <input
+                value={searchOperario}
+                onChange={(e) => setSearchOperario(e.target.value)}
+                placeholder="Buscar operario..."
+                className="w-full p-3 mb-2 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-200"
+              />
+              <div className="max-h-48 overflow-y-auto border rounded-2xl divide-y">
+                {filteredOperarios.map((name) => (
+                  <button
+                    key={name}
+                    onClick={() => toggle(name, selectedUsers, setSelectedUsers)}
+                    className={`w-full text-left p-3 text-sm flex justify-between items-center ${selectedUsers.includes(name) ? 'bg-blue-50 text-blue-700 font-bold' : 'bg-white text-slate-700'}`}
+                  >
+                    <span>{name}</span>
+                    {selectedUsers.includes(name) && <span>✓</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-black text-slate-400 uppercase mb-2">Operaciones</label>
+              <div className="space-y-2">
+                {OPERACIONES_LISTA.map((op) => (
+                  <button
+                    key={op}
+                    onClick={() => toggle(op, selectedOps, setSelectedOps)}
+                    className={`w-full text-left p-3 rounded-xl border text-sm flex justify-between gap-3 ${selectedOps.includes(op) ? 'bg-blue-50 border-blue-300 text-blue-700 font-bold' : 'bg-white border-slate-200 text-slate-700'}`}
+                  >
+                    <span>{op}</span>
+                    <span>{OBJETIVOS_MAP[op] || '-'} uds/h</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-black text-slate-400 uppercase mb-2">Referencia / lote / comentario</label>
+              <input
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                placeholder="Opcional"
+                className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-200"
+              />
+            </div>
+          </div>
+
+          <div className="p-4 border-t bg-slate-50 sticky bottom-0">
+            <button onClick={start} className="w-full py-3 bg-blue-600 text-white rounded-xl font-black shadow-sm active:bg-blue-700">
+              Iniciar tarea
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function FinishModal({ finishingTask, now, finishUnits, setFinishUnits, setFinishingTask, confirmFinishTask }) {
+      if (!finishingTask) return null;
+      const elapsed = now - finishingTask.startTime;
+      return (
+        <div className="absolute inset-0 bg-slate-900/60 z-50 flex items-end md:items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+            <div>
+              <h2 className="text-xl font-black text-slate-900">Finalizar tarea</h2>
+              <p className="text-sm text-slate-500 mt-1">Duración: <b>{formatTime(elapsed)}</b></p>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl p-3 text-sm border border-slate-200">
+              <div className="font-bold text-slate-800">{finishingTask.operaciones?.[0]}</div>
+              <div className="text-xs text-slate-500 mt-1">{finishingTask.operarios?.join(' · ')}</div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-black text-slate-400 uppercase mb-2">Unidades realizadas</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={finishUnits}
+                onChange={(e) => setFinishUnits(e.target.value)}
+                autoFocus
+                placeholder="Ej: 50"
+                className="w-full p-4 text-2xl font-black text-center bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-200"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setFinishingTask(null)} className="py-3 rounded-xl bg-slate-100 text-slate-700 font-bold border border-slate-200">
+                Cancelar
+              </button>
+              <button onClick={confirmFinishTask} className="py-3 rounded-xl bg-slate-900 text-white font-bold">
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function HistoryView({ history, setView, downloadCSV, clearHistory, exportJSON, importJSON }) {
+      const importRef = React.useRef(null);
+      return (
+        <div className="h-full flex flex-col bg-white">
+          <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+            <h2 className="font-bold text-lg flex items-center gap-2"><span>📊</span> Historial</h2>
+            <button onClick={() => setView('dashboard')} className="text-sm font-bold text-blue-600 bg-white border border-blue-200 px-3 py-1.5 rounded-lg">Cerrar</button>
+          </div>
+
+          <div className="p-4 bg-blue-50 border-b border-blue-100 text-xs text-blue-900">
+            Los registros se guardan solo en este navegador. Para conservar copia, descarga CSV o exporta copia JSON.
+          </div>
+
+          <div className="flex-1 overflow-y-auto divide-y">
+            {history.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 px-8">
+                <div className="text-5xl mb-4">📁</div>
+                <h3 className="font-bold text-slate-600">Sin registros</h3>
+                <p className="text-sm mt-1">Cuando finalices tareas aparecerán aquí.</p>
+              </div>
+            ) : (
+              history.map((log) => (
+                <div key={log.id} className="p-4 space-y-1">
+                  <div className="flex justify-between gap-3">
+                    <div className="font-black text-slate-900 text-sm">{log.operaciones?.join(' | ')}</div>
+                    <div className={`text-[10px] font-black px-2 py-1 rounded-full ${log.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {log.success ? 'CUMPLE' : 'NO CUMPLE'}
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-500">{log.startTimeString} → {log.endTimeString}</div>
+                  <div className="text-xs text-slate-600">{log.operarios?.join(' · ')}</div>
+                  <div className="flex justify-between text-xs pt-1">
+                    <span className="font-mono text-slate-500">⏱ {formatTime(log.durationMs)}</span>
+                    <span className="font-bold text-slate-600">{log.units} uds · {(log.productivity || 0).toFixed(2)} uds/h</span>
+                  </div>
+                  {log.reference && <div className="text-xs text-slate-400">Ref/Lote: {log.reference}</div>}
+                </div>
+              ))
+            )}
+          </div>
+
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => importJSON(e.target.files?.[0])}
+          />
+
+          <div className="p-4 border-t bg-slate-50 grid grid-cols-2 gap-2">
+            <button onClick={downloadCSV} disabled={history.length === 0} className="py-3 bg-white disabled:bg-slate-100 disabled:text-slate-400 border border-slate-300 text-slate-700 rounded-xl font-bold">
+              CSV Excel
+            </button>
+            <button onClick={exportJSON} className="py-3 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold">
+              Copia JSON
+            </button>
+            <button onClick={() => importRef.current?.click()} className="py-3 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold">
+              Importar
+            </button>
+            <button onClick={clearHistory} disabled={history.length === 0} className="py-3 bg-red-50 disabled:bg-slate-100 disabled:text-slate-400 border border-red-200 text-red-700 rounded-xl font-bold">
+              Borrar historial
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function OperariosView({ operariosList, setOperariosList, setView }) {
+      const [newName, setNewName] = useState('');
+      const [saving, setSaving] = useState(false);
+
+      const normalize = (s) => (s || '').trim();
+
+      const addOperario = () => {
+        const name = normalize(newName);
+        if (!name) return;
+        const exists = operariosList.some((x) => x.toLowerCase() === name.toLowerCase());
+        if (exists) {
+          alert('Ese operario ya existe.');
+          return;
+        }
+        setOperariosList((curr) => [...curr, name].sort((a, b) => a.localeCompare(b)));
+        setNewName('');
+      };
+
+      const removeOperario = (name) => {
+        if (!confirm(`¿Eliminar "${name}"?`)) return;
+        setOperariosList((curr) => curr.filter((x) => x !== name));
+      };
+
+      const saveLocal = () => {
+        setSaving(true);
+        const ok = safeWrite(STORAGE_KEYS.operarios, operariosList);
+        setTimeout(() => {
+          setSaving(false);
+          alert(ok ? 'Operarios guardados en este dispositivo.' : 'No se pudo guardar en este navegador.');
+        }, 150);
+      };
+
+      const restoreDefault = () => {
+        if (!confirm('¿Restaurar la lista inicial de operarios?')) return;
+        setOperariosList(DEFAULT_OPERARIOS_LISTA);
+      };
+
+      return (
+        <div className="h-full flex flex-col bg-white">
+          <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+            <h2 className="font-bold text-lg flex items-center gap-2"><span>👥</span> Personal</h2>
+            <button onClick={() => setView('dashboard')} className="text-sm font-bold text-blue-600 bg-white border border-blue-200 px-3 py-1.5 rounded-lg">Cerrar</button>
+          </div>
+
+          <div className="p-4 space-y-3">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+              <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Añadir operario</label>
+              <div className="flex gap-2">
+                <input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addOperario()}
+                  placeholder="Nombre / código"
+                  className="flex-1 min-w-0 p-3 bg-white rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-200"
+                />
+                <button onClick={addOperario} className="px-4 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700">+ Añadir</button>
+              </div>
+            </div>
+            <div className="text-xs text-slate-500">Total: <b>{operariosList.length}</b></div>
+            <div className="max-h-[55vh] overflow-y-auto border rounded-2xl divide-y">
+              {operariosList.map((name) => (
+                <div key={name} className="flex items-center justify-between gap-3 p-3">
+                  <span className="text-sm font-medium text-slate-800 truncate">{name}</span>
+                  <button onClick={() => removeOperario(name)} className="px-3 py-1.5 rounded-lg text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 border border-red-200">
+                    Eliminar
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-auto p-4 border-t bg-slate-50 grid grid-cols-2 gap-2">
+            <button onClick={restoreDefault} className="py-3 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold">
+              Restaurar
+            </button>
+            <button onClick={saveLocal} disabled={saving} className="py-3 bg-slate-900 disabled:bg-slate-400 text-white rounded-xl font-bold">
+              {saving ? 'Guardando...' : 'Guardar local'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      const [view, setView] = useState('dashboard');
+      const [operariosList, setOperariosList] = useState(() => safeRead(STORAGE_KEYS.operarios, DEFAULT_OPERARIOS_LISTA));
+      const [activeTasks, setActiveTasks] = useState(() => safeRead(STORAGE_KEYS.activeTasks, []));
+      const [history, setHistory] = useState(() => safeRead(STORAGE_KEYS.history, []));
+      const [finishingTask, setFinishingTask] = useState(null);
+      const [finishUnits, setFinishUnits] = useState('');
+      const [now, setNow] = useState(Date.now());
+
+      useEffect(() => {
+        safeWrite(STORAGE_KEYS.activeTasks, activeTasks);
+      }, [activeTasks]);
+
+      useEffect(() => {
+        safeWrite(STORAGE_KEYS.operarios, operariosList);
+      }, [operariosList]);
+
+      useEffect(() => {
+        safeWrite(STORAGE_KEYS.history, history);
+      }, [history]);
+
+      useEffect(() => {
+        const id = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(id);
+      }, []);
+
+      const addNewTask = (taskData) => {
+        const newTask = {
+          id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+          ...taskData,
+          startTime: Date.now()
+        };
+        setActiveTasks((curr) => [newTask, ...curr]);
+        setView('dashboard');
+      };
+
+      const confirmFinishTask = () => {
+        if (!finishingTask) return;
+        const endTime = Date.now();
+        const durationMs = endTime - finishingTask.startTime;
+        const durationHours = durationMs / 1000 / 3600;
+        const units = parseInt(finishUnits || 0, 10);
+        const prod = durationHours > 0 ? units / durationHours : 0;
+        const mainOp = finishingTask.operaciones?.[0] || '';
+        const target = OBJETIVOS_MAP[mainOp] || 0;
+        const logEntry = {
+          id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+          operarios: finishingTask.operarios || [],
+          operaciones: finishingTask.operaciones || [],
+          reference: finishingTask.reference || '',
+          startTime: finishingTask.startTime,
+          endTime,
+          startTimeString: formatDateTime(finishingTask.startTime),
+          endTimeString: formatDateTime(endTime),
+          durationMs,
+          units,
+          productivity: prod,
+          target,
+          success: target > 0 ? prod >= target : true,
+          timestamp: endTime
+        };
+
+        setActiveTasks((curr) => curr.filter((t) => t.id !== finishingTask.id));
+        setHistory((curr) => [logEntry, ...curr]);
+        setFinishingTask(null);
+        setFinishUnits('');
+      };
+
+      const cancelTask = (taskId) => {
+        if (confirm('¿Seguro que quieres borrar esta tarea sin guardar datos?')) {
+          setActiveTasks((curr) => curr.filter((t) => t.id !== taskId));
+        }
+      };
+
+      const downloadCSV = () => {
+        if (history.length === 0) return;
+        const headers = ['Fecha', 'Inicio', 'Fin', 'Ref/Lote', 'Operarios', 'Tareas', 'Duración', 'Unidades', 'Prod. Real', 'Objetivo', 'Cumple'];
+        const rows = history.map((log) => {
+          const start = log.startTimeString || '';
+          const end = log.endTimeString || '';
+          const fecha = start.split(',')[0] || '';
+          const inicio = start.split(',')[1]?.trim() || '';
+          const fin = end.split(',')[1]?.trim() || '';
+          return [
+            fecha,
+            inicio,
+            fin,
+            `"${String(log.reference || '').replace(/"/g, '""')}"`,
+            `"${(log.operarios || []).join(' | ').replace(/"/g, '""')}"`,
+            `"${(log.operaciones || []).join(' | ').replace(/"/g, '""')}"`,
+            formatTime(log.durationMs),
+            log.units,
+            (log.productivity || 0).toFixed(2).replace('.', ','),
+            log.target,
+            log.success ? 'SI' : 'NO'
+          ].join(';');
+        });
+        const csv = '\ufeff' + [headers.join(';'), ...rows].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `ProdTracker_Data_${new Date().toISOString().slice(0,10)}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      };
+
+      const exportJSON = () => {
+        const backup = {
+          exportedAt: new Date().toISOString(),
+          app: 'ProdTracker Local',
+          operariosList,
+          activeTasks,
+          history
+        };
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `ProdTracker_Backup_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      };
+
+      const importJSON = (file) => {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const data = JSON.parse(reader.result);
+            if (Array.isArray(data.operariosList)) setOperariosList(data.operariosList);
+            if (Array.isArray(data.activeTasks)) setActiveTasks(data.activeTasks);
+            if (Array.isArray(data.history)) setHistory(data.history);
+            alert('Copia importada correctamente.');
+          } catch (err) {
+            console.error(err);
+            alert('No se pudo importar el archivo JSON.');
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      const clearHistory = () => {
+        if (!confirm('¿Seguro que quieres borrar todo el historial local?')) return;
+        setHistory([]);
+      };
+
+      return (
+        <div className="min-h-screen bg-slate-200 flex items-center justify-center p-0 md:p-4 font-sans">
+          <div className="w-full md:max-w-md bg-white h-[100vh] md:h-[850px] md:rounded-[2rem] shadow-2xl overflow-hidden flex flex-col relative border-x md:border border-slate-200">
+            <TopBar view={view} setView={setView} />
+
+            {view === 'dashboard' && (
+              <DashboardView
+                activeTasks={activeTasks}
+                now={now}
+                onFinish={setFinishingTask}
+                onCancel={cancelTask}
+                setView={setView}
+              />
+            )}
+
+            {view === 'new-task' && (
+              <NewTaskView
+                onCancel={() => setView('dashboard')}
+                onStart={addNewTask}
+                operariosList={operariosList}
+              />
+            )}
+
+            {view === 'history' && (
+              <HistoryView
+                history={history}
+                setView={setView}
+                downloadCSV={downloadCSV}
+                clearHistory={clearHistory}
+                exportJSON={exportJSON}
+                importJSON={importJSON}
+              />
+            )}
+
+            {view === 'operarios' && (
+              <OperariosView
+                operariosList={operariosList}
+                setOperariosList={setOperariosList}
+                setView={setView}
+              />
+            )}
+
+            <BottomNav view={view} setView={setView} activeTasks={activeTasks} />
+
+            {finishingTask && (
+              <FinishModal
+                finishingTask={finishingTask}
+                now={now}
+                finishUnits={finishUnits}
+                setFinishUnits={setFinishUnits}
+                setFinishingTask={setFinishingTask}
+                confirmFinishTask={confirmFinishTask}
+              />
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    try {
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    } catch (err) {
+      console.error(err);
+      document.getElementById('root').innerHTML = `
+        <div style="font-family:Arial;padding:20px;max-width:600px;margin:auto">
+          <h1>ProdTracker</h1>
+          <p>No se pudo iniciar la aplicación.</p>
+          <pre style="white-space:pre-wrap;background:#f1f5f9;padding:12px;border-radius:8px">${String(err && err.message ? err.message : err)}</pre>
+        </div>`;
+    }
+  </script>
+</body>
+</html>
