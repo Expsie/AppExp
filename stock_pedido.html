@@ -5,81 +5,232 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>App de stock y pedidos - Supabase</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        h1 { text-align: center; }
-        .section { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input, select { padding: 6px; margin-bottom: 10px; width: 100%; max-width: 420px; box-sizing: border-box; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        tbody tr:nth-child(odd) { background-color: #fafafa; }
-        button { margin-right: 5px; margin-bottom: 5px; padding: 8px 12px; font-size: 1em; }
-        code { background: #f5f5f5; padding: 2px 4px; border-radius: 4px; }
-        .line-row input { width: 100%; box-sizing: border-box; }
-        .status { display: inline-block; margin-left: 8px; font-weight: bold; }
-        .muted { color: #666; font-size: 0.95em; }
-        .error { color: #a40000; }
-        .ok { color: #0a6b12; }
+        :root {
+            --bg: #f5f6f8;
+            --surface: #ffffff;
+            --border: #e5e7eb;
+            --text: #1f2430;
+            --muted: #6b7280;
+            --accent-green: #4caf50;
+            --accent-green-dark: #3d9140;
+            --purple-bg: #ede3fb;
+            --purple-text: #7c3aed;
+            --orange-bg: #fdecd1;
+            --orange-text: #c2740b;
+            --green-bg: #dcf5e3;
+            --green-text: #1e8a4c;
+            --blue: #2563eb;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", Roboto, Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: var(--bg);
+            color: var(--text);
+        }
+        .page { max-width: 1200px; margin: 0 auto; }
+        h1 { font-size: 22px; margin: 0 0 4px 0; }
+        h2 { font-size: 16px; margin: 0 0 4px 0; }
+        .subtitle { color: var(--muted); font-size: 13px; margin: 0 0 18px 0; }
+
+        .topbar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .conn-status { display: flex; align-items: center; gap: 10px; }
+        .status { font-size: 13px; font-weight: 600; }
+        .status.ok { color: var(--green-text); }
+        .status.error { color: #b3261e; }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+        }
+        .muted { color: var(--muted); font-size: 13px; }
+        code { background: #f1f2f4; padding: 2px 5px; border-radius: 4px; font-size: 12px; }
+
+        .field-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+            margin-top: 14px;
+        }
+        .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+        input[type="text"], input[type="number"], input[type="url"], input[type="date"], select {
+            width: 100%;
+            padding: 9px 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            background: var(--surface);
+            color: var(--text);
+        }
+        input:focus, select:focus { outline: 2px solid #c7d2fe; border-color: var(--blue); }
+
+        /* ---------- buttons ---------- */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            padding: 9px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn:hover { background: #f2f3f5; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-green); border-color: var(--accent-green); color: #fff; }
+        .btn-primary:hover { background: var(--accent-green-dark); }
+        .btn-outline { background: var(--surface); border-color: var(--border); }
+        .btn-ghost { background: transparent; border: none; color: var(--blue); padding: 6px 8px; }
+        .btn-icon {
+            border: 1px solid var(--border);
+            background: var(--surface);
+            border-radius: 6px;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-icon:hover { background: #fdecec; border-color: #f3b9b9; color: #b3261e; }
+
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 16px 0 14px 0;
+        }
+
+        /* ---------- table ---------- */
+        .table-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow-x: auto;
+        }
+        table { width: 100%; border-collapse: collapse; min-width: 760px; }
+        thead th {
+            text-align: left;
+            font-size: 12px;
+            color: var(--text);
+            font-weight: 700;
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+            background: #fafbfc;
+        }
+        tbody td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+            vertical-align: middle;
+        }
+        tbody tr:hover { background: #fafbfc; }
+        tbody tr.line-row input[type="text"], tbody tr.line-row input[type="number"] {
+            padding: 7px 9px;
+            font-size: 13px;
+        }
+        .empty-row td { text-align: center; color: var(--muted); padding: 26px; }
+
+        .pill {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .pill-not-found { background: var(--orange-bg); color: var(--orange-text); }
+        .pill-ok { background: var(--green-bg); color: var(--green-text); }
+        .pill-muted { background: #eef0f3; color: var(--muted); }
     </style>
 </head>
 <body>
-    <h1>Gestor de stock y pedidos</h1>
+<div class="page">
 
-    <div class="section" id="supabase-section">
-        <h2>Conexión con Supabase</h2>
-        <p class="muted">Conexión configurada. Esta pantalla solo permite crear pedidos; la actualización/importación manual de stock está en <code>ver_pedidos.html</code>.</p>
+    <div class="topbar">
         <div>
-            <button type="button" id="refresh-data-btn">Actualizar ahora</button>
+            <h1>Gestor de stock y pedidos</h1>
+            <p class="subtitle">Crea un pedido validado contra el stock disponible en Supabase</p>
+        </div>
+        <div class="conn-status">
             <span id="supabase-status" class="status"></span>
+            <button type="button" id="refresh-data-btn" class="btn btn-ghost">↻ Actualizar ahora</button>
         </div>
     </div>
 
-    <div class="section" id="pedido-section">
-        <h2>Crear pedido de stock</h2>
-        <div>
-            <label for="ldap">LDAP solicitante</label>
-            <input type="text" id="ldap" required placeholder="LDAP del solicitante" />
-        </div>
-        <div>
-            <label for="tienda">Tienda</label>
-            <select id="tienda" required>
-                <option value="">Seleccione una tienda</option>
-                <option value="T038">T038</option>
-                <option value="T006">T006</option>
-            </select>
-        </div>
-        <div>
-            <label for="cc">CC asociado</label>
-            <input type="text" id="cc" required placeholder="Centro de coste" />
-        </div>
-        <div>
-            <label for="circuito">Circuito</label>
-            <select id="circuito" required>
-                <option value="">Seleccione un circuito</option>
-                <option value="Transporte">Transporte</option>
-                <option value="Retirada en Tienda">Retirada en Tienda</option>
-                <option value="Retirada en LLS Palma">Retirada en LLS Palma</option>
-            </select>
-        </div>
-        <button type="button" id="add-line-btn">Añadir línea</button>
-        <button type="button" id="finalize-btn">Finalizar pedido</button>
-        <button type="button" id="view-orders-btn">Ver pedidos guardados</button>
-        <table id="lines-table">
-            <thead>
-                <tr>
-                    <th>Referencia</th>
-                    <th>Designación</th>
-                    <th>Sección</th>
-                    <th>Cant. solicitada</th>
-                    <th>Cant. disponible</th>
-                    <th>Ubicaciones</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+    <div class="panel" id="supabase-section">
+        <p class="muted">Conexión configurada. Esta pantalla solo permite crear pedidos; la actualización/importación manual de stock está en <code>ver_pedidos.html</code>.</p>
     </div>
+
+    <div class="panel" id="pedido-section">
+        <h2>Crear pedido de stock</h2>
+        <div class="field-grid">
+            <div class="field">
+                <label for="ldap">LDAP solicitante</label>
+                <input type="text" id="ldap" required placeholder="LDAP del solicitante" />
+            </div>
+            <div class="field">
+                <label for="tienda">Tienda</label>
+                <select id="tienda" required>
+                    <option value="">Seleccione una tienda</option>
+                    <option value="T038">T038</option>
+                    <option value="T006">T006</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="cc">CC asociado</label>
+                <input type="text" id="cc" required placeholder="Centro de coste" />
+            </div>
+            <div class="field">
+                <label for="circuito">Circuito</label>
+                <select id="circuito" required>
+                    <option value="">Seleccione un circuito</option>
+                    <option value="Transporte">Transporte</option>
+                    <option value="Retirada en Tienda">Retirada en Tienda</option>
+                    <option value="Retirada en LLS Palma">Retirada en LLS Palma</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <button type="button" id="add-line-btn" class="btn btn-outline">+ Añadir línea</button>
+            <button type="button" id="finalize-btn" class="btn btn-primary">✓ Finalizar pedido</button>
+            <div style="flex:1"></div>
+            <button type="button" id="view-orders-btn" class="btn btn-outline">Ver pedidos guardados</button>
+        </div>
+
+        <div class="table-wrap">
+            <table id="lines-table">
+                <thead>
+                    <tr>
+                        <th>Referencia</th>
+                        <th>Designación</th>
+                        <th>Sección</th>
+                        <th>Cant. solicitada</th>
+                        <th>Cant. disponible</th>
+                        <th>Ubicaciones</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
     <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
     <script>
@@ -272,6 +423,12 @@
             return key.toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '');
         }
 
+        function escapeHtml(value) {
+            return toText(value).replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+            }[char]));
+        }
+
         function normalizeStockRow(row) {
             return {
                 id: pick(row, ['id', 'ID'], undefined),
@@ -457,7 +614,7 @@
                 <td><input type="number" class="cant-solicitada-input" min="1" value="1" /></td>
                 <td class="cant-disponible-cell"></td>
                 <td class="ubicaciones-cell"></td>
-                <td><button type="button" class="delete-line-btn">Eliminar</button></td>
+                <td><button type="button" class="btn-icon delete-line-btn" title="Eliminar línea">×</button></td>
             `;
             tbody.appendChild(tr);
             const refInput = tr.querySelector('.ref-input');
@@ -590,7 +747,7 @@
             } finally {
                 const finalizeBtn = document.getElementById('finalize-btn');
                 finalizeBtn.disabled = false;
-                finalizeBtn.textContent = 'Finalizar pedido';
+                finalizeBtn.textContent = '✓ Finalizar pedido';
             }
         }
 

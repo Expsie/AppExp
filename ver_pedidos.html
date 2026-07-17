@@ -5,83 +5,317 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pedidos guardados - Supabase</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        h1 { text-align: center; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        tbody tr:nth-child(odd) { background-color: #fafafa; }
-        button { margin-right: 5px; margin-bottom: 5px; padding: 6px 10px; }
-        input, select { padding: 6px; margin-bottom: 10px; box-sizing: border-box; }
-        code { background: #f5f5f5; padding: 2px 4px; border-radius: 4px; }
-        .details { margin: 10px 0; }
-        .status { display: inline-block; margin-left: 8px; font-weight: bold; }
-        .muted { color: #666; font-size: 0.95em; }
-        .error { color: #a40000; }
-        .ok { color: #0a6b12; }
+        :root {
+            --bg: #f5f6f8;
+            --surface: #ffffff;
+            --border: #e5e7eb;
+            --text: #1f2430;
+            --muted: #6b7280;
+            --accent-green: #4caf50;
+            --accent-green-dark: #3d9140;
+            --purple-bg: #ede3fb;
+            --purple-text: #7c3aed;
+            --orange-bg: #fdecd1;
+            --orange-text: #c2740b;
+            --green-bg: #dcf5e3;
+            --green-text: #1e8a4c;
+            --blue: #2563eb;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", Roboto, Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: var(--bg);
+            color: var(--text);
+        }
+        .page { max-width: 1500px; margin: 0 auto; }
+        h1 { font-size: 22px; margin: 0 0 4px 0; }
+        .subtitle { color: var(--muted); font-size: 13px; margin: 0 0 18px 0; }
+
+        .topbar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .conn-status { display: flex; align-items: center; gap: 10px; }
+        .status { font-size: 13px; font-weight: 600; }
+        .status.ok { color: var(--green-text); }
+        .status.error { color: #b3261e; }
+
+        details.panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 4px 16px;
+            margin-bottom: 16px;
+        }
+        details.panel summary {
+            cursor: pointer;
+            padding: 12px 0;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text);
+            list-style: none;
+        }
+        details.panel summary::-webkit-details-marker { display: none; }
+        details.panel summary::before { content: "▸ "; color: var(--muted); }
+        details.panel[open] summary::before { content: "▾ "; }
+        details.panel .panel-body { padding: 4px 0 16px 0; }
+        .muted { color: var(--muted); font-size: 13px; }
+        code { background: #f1f2f4; padding: 2px 5px; border-radius: 4px; font-size: 12px; }
+
+        .field { margin-bottom: 10px; }
+        .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+        input[type="text"], input[type="url"], input[type="date"], input[type="file"], select {
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            background: var(--surface);
+            color: var(--text);
+        }
+
+        /* ---------- buttons ---------- */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            padding: 9px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn:hover { background: #f2f3f5; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-green); border-color: var(--accent-green); color: #fff; }
+        .btn-primary:hover { background: var(--accent-green-dark); }
+        .btn-outline { background: var(--surface); border-color: var(--border); }
+        .btn-ghost { background: transparent; border: none; color: var(--blue); padding: 6px 8px; }
+        .btn-icon {
+            border: 1px solid var(--border);
+            background: var(--surface);
+            border-radius: 6px;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-right: 4px;
+        }
+        .btn-icon:hover { background: #f2f3f5; }
+
+        /* ---------- filters bar (tienda / cc / circuito / fecha) ---------- */
+        .filters-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 14px;
+        }
+        .filters-bar .field { margin-bottom: 0; }
+
+        /* ---------- toolbar above table ---------- */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .toolbar-spacer { flex: 1; }
+        .select-estado { min-width: 190px; }
+
+        /* ---------- table ---------- */
+        .table-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow-x: auto;
+        }
+        table { width: 100%; border-collapse: collapse; min-width: 1100px; }
+        thead tr.header-row th {
+            text-align: left;
+            font-size: 12px;
+            text-transform: none;
+            color: var(--text);
+            font-weight: 700;
+            padding: 8px 12px 12px 12px;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        thead tr.filter-row th {
+            padding: 10px 12px 4px 12px;
+            border-bottom: none;
+        }
+        thead tr.filter-row input[type="text"],
+        thead tr.filter-row input[type="date"],
+        thead tr.filter-row select {
+            width: 100%;
+            min-width: 90px;
+            padding: 7px 9px;
+            font-size: 12px;
+        }
+        tbody td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        tbody tr:hover { background: #fafbfc; }
+        tbody tr.details-row { background: #fbfbfd; }
+        tbody tr.details-row td { white-space: normal; }
+        .empty-row td { text-align: center; color: var(--muted); padding: 30px; }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 14px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .badge-purple { background: var(--purple-bg); color: var(--purple-text); }
+        .badge-orange { background: var(--orange-bg); color: var(--orange-text); }
+        .badge-green { background: var(--green-bg); color: var(--green-text); }
+
+        .order-header-table { border-collapse: collapse; font-size: 13px; }
+        .order-header-table td { padding: 4px 10px; border: none; }
+        .order-header-table td:first-child { color: var(--muted); font-weight: 600; }
+
+        .details-table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+        .details-table th, .details-table td { border: 1px solid var(--border); padding: 6px 8px; font-size: 12px; text-align: left; }
+        .details-table th { background: #f7f8fa; }
     </style>
 </head>
 <body>
-    <h1>Pedidos guardados</h1>
-    <p>A continuación se muestran los pedidos registrados en Supabase, tabla <code>PedidoMutuOfline</code>.</p>
+<div class="page">
 
-    <div id="supabase-section" style="margin: 10px 0 20px 0;">
-        <p class="muted">Conexión con Supabase configurada. La publishable key no se muestra en pantalla.</p>
-        <button type="button" id="refresh-orders-btn">Actualizar ahora</button>
-        <span id="supabase-status" class="status"></span>
-    </div>
-
-    <div id="import-section" style="margin: 10px 0 20px 0;">
-        <h2>Actualizar stock en Supabase</h2>
-        <p>Selecciona un Excel con la misma estructura que la tabla <code>StockDispo</code>: <strong>Tienda</strong>, <strong>Address</strong>, <strong>SSCC</strong>, <strong>Product Code</strong>, <strong>EAN code</strong>, <strong>Product name</strong>, <strong>Department</strong> y <strong>Qty</strong>.</p>
-        <p class="muted"><strong>Importante:</strong> al importar se reemplaza el contenido actual de la tabla <code>StockDispo</code>.</p>
-        <input type="file" id="import-stock" accept=".xlsx,.xls" style="width:100%;max-width:420px;" />
-        <div style="margin-top:5px;">
-            <label for="stock-url">URL del archivo en Drive (opcional)</label><br>
-            <input type="url" id="stock-url" placeholder="https://drive.google.com/…" style="width:100%;max-width:420px;" />
+    <div class="topbar">
+        <div>
+            <h1>Pedidos guardados</h1>
+            <p class="subtitle">Pedidos registrados en Supabase &middot; tabla <code>PedidoMutuOfline</code></p>
         </div>
-        <button type="button" id="import-btn">Importar stock a Supabase</button>
-        <span id="import-status" class="status"></span>
+        <div class="conn-status">
+            <span id="supabase-status" class="status"></span>
+            <button type="button" id="refresh-orders-btn" class="btn btn-ghost">↻ Actualizar ahora</button>
+        </div>
     </div>
 
-    <div id="filter-section" style="margin: 10px 0;">
-        <label for="filter-tienda">Tienda:</label>
-        <select id="filter-tienda" style="margin-right:10px;">
-            <option value="">Todas</option>
-            <option value="T038">T038</option>
-            <option value="T006">T006</option>
-        </select>
-        <label for="filter-cc">CC:</label>
-        <input type="text" id="filter-cc" placeholder="Centro de coste" style="margin-right:10px;" />
-        <label for="filter-circuito">Circuito:</label>
-        <select id="filter-circuito" style="margin-right:10px;">
-            <option value="">Todos</option>
-            <option value="Transporte">Transporte</option>
-            <option value="Retirada en Tienda">Retirada en Tienda</option>
-            <option value="Retirada en LLS Palma">Retirada en LLS Palma</option>
-        </select>
-        <label for="filter-fecha">Fecha:</label>
-        <input type="date" id="filter-fecha" style="margin-right:10px;" />
-        <button type="button" id="apply-filters-btn">Aplicar filtros</button>
-        <button type="button" id="export-filtered-btn">Exportar filtrados a Excel</button>
+    <details class="panel">
+        <summary>Actualizar stock en Supabase</summary>
+        <div class="panel-body">
+            <p class="muted">Selecciona un Excel con la misma estructura que la tabla <code>StockDispo</code>: <strong>Tienda</strong>, <strong>Address</strong>, <strong>SSCC</strong>, <strong>Product Code</strong>, <strong>EAN code</strong>, <strong>Product name</strong>, <strong>Department</strong> y <strong>Qty</strong>.</p>
+            <p class="muted"><strong>Importante:</strong> al importar se reemplaza el contenido actual de la tabla <code>StockDispo</code>.</p>
+            <div class="field">
+                <label for="import-stock">Archivo Excel</label>
+                <input type="file" id="import-stock" accept=".xlsx,.xls" style="width:100%;max-width:420px;" />
+            </div>
+            <div class="field">
+                <label for="stock-url">URL del archivo en Drive (opcional)</label>
+                <input type="url" id="stock-url" placeholder="https://drive.google.com/…" style="width:100%;max-width:420px;" />
+            </div>
+            <button type="button" id="import-btn" class="btn btn-outline">Importar stock a Supabase</button>
+            <span id="import-status" class="status"></span>
+        </div>
+    </details>
+
+    <div class="filters-bar">
+        <div class="field">
+            <label for="filter-tienda">Tienda</label>
+            <select id="filter-tienda">
+                <option value="">Todas</option>
+                <option value="T038">T038</option>
+                <option value="T006">T006</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="filter-cc">CC</label>
+            <input type="text" id="filter-cc" placeholder="Centro de coste" />
+        </div>
+        <div class="field">
+            <label for="filter-circuito">Circuito</label>
+            <select id="filter-circuito">
+                <option value="">Todos</option>
+                <option value="Transporte">Transporte</option>
+                <option value="Retirada en Tienda">Retirada en Tienda</option>
+                <option value="Retirada en LLS Palma">Retirada en LLS Palma</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="filter-fecha">Fecha</label>
+            <input type="date" id="filter-fecha" />
+        </div>
+        <button type="button" id="apply-filters-btn" class="btn btn-outline">Aplicar filtros</button>
     </div>
 
-    <table id="orders-table">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>LDAP</th>
-                <th>Tienda</th>
-                <th>CC</th>
-                <th>Circuito</th>
-                <th>Fecha</th>
-                <th>Impreso</th>
-                <th>Preparado</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
+    <div class="toolbar">
+        <button type="button" id="new-pedido-btn" class="btn btn-primary">+ Pedido</button>
+        <select id="bulk-estado-select" class="select-estado">
+            <option value="">Seleccione estado</option>
+            <option value="asignado">Asignado</option>
+            <option value="en_preparacion">En preparación</option>
+            <option value="preparado">Preparado</option>
+        </select>
+        <button type="button" id="bulk-apply-btn" class="btn btn-outline" disabled>✓ Aplicar</button>
+        <div class="toolbar-spacer"></div>
+        <button type="button" id="export-filtered-btn" class="btn btn-outline">Exportar Excel</button>
+    </div>
+
+    <div class="table-wrap">
+        <table id="orders-table">
+            <thead>
+                <tr class="filter-row">
+                    <th><input type="checkbox" id="select-all-checkbox" /></th>
+                    <th><input type="text" id="col-filter-id" placeholder="Filtrar..." /></th>
+                    <th><input type="text" id="col-filter-pedido" placeholder="Filtrar..." /></th>
+                    <th><input type="date" id="col-filter-fecha" title="Filtrar por día" /></th>
+                    <th>
+                        <select id="col-filter-estado">
+                            <option value="">Filtrar...</option>
+                            <option value="asignado">Asignado</option>
+                            <option value="en_preparacion">En preparación</option>
+                            <option value="preparado">Preparado</option>
+                        </select>
+                    </th>
+                    <th><input type="text" id="col-filter-seccion" placeholder="Filtrar..." /></th>
+                    <th><input type="text" id="col-filter-referencia" placeholder="Filtrar..." /></th>
+                    <th><input type="text" id="col-filter-ean" placeholder="Filtrar..." /></th>
+                    <th><input type="text" id="col-filter-descripcion" placeholder="Filtrar..." /></th>
+                    <th><input type="text" id="col-filter-cantidad" placeholder="Filtrar..." /></th>
+                    <th></th>
+                </tr>
+                <tr class="header-row">
+                    <th></th>
+                    <th>id</th>
+                    <th>Nº Pedido</th>
+                    <th>Fecha</th>
+                    <th>Estado</th>
+                    <th>Sección</th>
+                    <th>Referencia</th>
+                    <th>EAN</th>
+                    <th>Descripción</th>
+                    <th>Cantidad</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
 
     <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
     <script>
@@ -95,8 +329,9 @@
         const REFRESH_INTERVAL_MS = 180000; // 3 minutos
 
         let pedidosCache = [];
-        let currentFilteredOrders = [];
+        let currentFilteredRows = [];
         let activePedidoColumnMap = null;
+        let stockEanMap = {};
 
         const PEDIDO_COLUMN_MAPPINGS = [
             {
@@ -216,7 +451,6 @@
             return `select=${columns.map(encodeURIComponent).join(',')}&limit=0`;
         }
 
-
         function extractDriveFileId(url) {
             const match1 = url.match(/\/file\/d\/([^/]+)\/|\/uc\?id=([^&]+)/);
             if (match1) return match1[1] || match1[2];
@@ -302,10 +536,33 @@
                 setImportStatus('Subiendo stock a Supabase...', true);
                 await reemplazarStockSupabase(articles);
                 setImportStatus(`Se importaron ${articles.length} artículos en StockDispo.`, true);
+                await cargarEanMap();
             } catch (error) {
                 console.error(error);
                 setImportStatus(error.message || 'Error al importar el archivo.', false);
             }
+        }
+
+        // ---------- EAN lookup (desde StockDispo) ----------
+        async function cargarEanMap() {
+            try {
+                const query = `select=${encodeURIComponent('Product Code')},${encodeURIComponent('EAN code')}`;
+                const rows = await supabaseRequest(SUPABASE_CONFIG.stockTable, { query });
+                const map = {};
+                (rows || []).forEach(r => {
+                    const code = r['Product Code'];
+                    const ean = r['EAN code'];
+                    if (code) map[normalizeKey(code)] = toText(ean);
+                });
+                stockEanMap = map;
+            } catch (error) {
+                console.error('No se pudo cargar el EAN desde StockDispo', error);
+            }
+        }
+
+        function getEan(referencia) {
+            if (!referencia) return '';
+            return stockEanMap[normalizeKey(referencia)] || '';
         }
 
         function normalizePedidoRow(row) {
@@ -345,7 +602,8 @@
         async function cargarPedidosSupabase() {
             try {
                 setStatus('Cargando pedidos...', true);
-                pedidosCache = await fetchPedidos();
+                const [orders] = await Promise.all([fetchPedidos(), cargarEanMap()]);
+                pedidosCache = orders;
                 setStatus(`Conectado. Pedidos: ${pedidosCache.length}.`, true);
                 applyFilters();
             } catch (error) {
@@ -402,74 +660,6 @@
             return null;
         }
 
-        function renderOrders(orders) {
-            const tbody = document.querySelector('#orders-table tbody');
-            tbody.innerHTML = '';
-            if (!orders.length) {
-                const tr = document.createElement('tr');
-                tr.innerHTML = '<td colspan="9">No hay pedidos para mostrar.</td>';
-                tbody.appendChild(tr);
-                return;
-            }
-            orders.forEach(order => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${escapeHtml(order.id)}</td>
-                    <td>${escapeHtml(order.ldap)}</td>
-                    <td>${escapeHtml(order.tienda)}</td>
-                    <td>${escapeHtml(order.cc)}</td>
-                    <td>${escapeHtml(order.circuito)}</td>
-                    <td>${escapeHtml(formatDate(order.fecha))}</td>
-                    <td style="text-align:center;"><input type="checkbox" class="impreso-checkbox" ${order.impreso ? 'checked' : ''} /></td>
-                    <td style="text-align:center;"><input type="checkbox" class="preparado-checkbox" ${order.preparado ? 'checked' : ''} /></td>
-                    <td>
-                        <button type="button" class="details-btn">Detalles</button>
-                        <button type="button" class="print-btn">Imprimir</button>
-                        <button type="button" class="export-btn">Exportar Excel</button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-                const detailsRow = document.createElement('tr');
-                detailsRow.style.display = 'none';
-                const detailsCell = document.createElement('td');
-                detailsCell.colSpan = 9;
-                detailsCell.classList.add('details');
-                detailsRow.appendChild(detailsCell);
-                tbody.appendChild(detailsRow);
-
-                tr.querySelector('.details-btn').addEventListener('click', () => {
-                    if (detailsRow.style.display === 'none') {
-                        detailsCell.innerHTML = generateDetailsTable(order);
-                        detailsRow.style.display = '';
-                    } else {
-                        detailsRow.style.display = 'none';
-                    }
-                });
-
-                const impresoCheckbox = tr.querySelector('.impreso-checkbox');
-                impresoCheckbox.addEventListener('change', async (e) => {
-                    await updateOrderState(order, { impreso: e.target.checked });
-                });
-
-                const preparadoCheckbox = tr.querySelector('.preparado-checkbox');
-                preparadoCheckbox.addEventListener('change', async (e) => {
-                    await updateOrderState(order, { preparado: e.target.checked });
-                });
-
-                tr.querySelector('.export-btn').addEventListener('click', async () => {
-                    exportOrderToExcel(order);
-                    impresoCheckbox.checked = true;
-                    await updateOrderState(order, { impreso: true });
-                });
-
-                tr.querySelector('.print-btn').addEventListener('click', async () => {
-                    printOrder(order);
-                    impresoCheckbox.checked = true;
-                    await updateOrderState(order, { impreso: true });
-                });
-            });
-        }
-
         async function updateOrderState(order, changes) {
             try {
                 const updated = await actualizarPedidoSupabase(order.id, changes);
@@ -490,32 +680,207 @@
             return date.toLocaleString('es-ES');
         }
 
+        // ---------- estado derivado de impreso/preparado ----------
+        function getOrderEstado(order) {
+            if (order.preparado) return { value: 'preparado', label: 'PREPARADO', cls: 'badge-green' };
+            if (order.impreso) return { value: 'en_preparacion', label: 'EN PREPARACIÓN', cls: 'badge-orange' };
+            return { value: 'asignado', label: 'ASIGNADO', cls: 'badge-purple' };
+        }
+
+        function estadoValueToChanges(value) {
+            if (value === 'preparado') return { impreso: true, preparado: true };
+            if (value === 'en_preparacion') return { impreso: true, preparado: false };
+            return { impreso: false, preparado: false }; // asignado
+        }
+
+        // ---------- aplanar pedidos en filas por línea de producto ----------
+        function buildFlattenedRows(orders) {
+            const rows = [];
+            orders.forEach(order => {
+                const estado = getOrderEstado(order);
+                const lineas = (order.lineas && order.lineas.length) ? order.lineas : [null];
+                lineas.forEach((linea, idx) => {
+                    rows.push({
+                        rowId: `${order.id}-${idx + 1}`,
+                        lineNumber: (Number(order.id) || 0) * 100 + idx,
+                        order,
+                        linea,
+                        estado
+                    });
+                });
+            });
+            return rows;
+        }
+
         function applyFilters() {
             const tiendaFilter = document.getElementById('filter-tienda').value;
             const ccFilter = document.getElementById('filter-cc').value.trim().toLowerCase();
             const circuitoFilter = document.getElementById('filter-circuito').value;
-            const fechaFilter = document.getElementById('filter-fecha').value;
-            currentFilteredOrders = pedidosCache.filter(order => {
+            const fechaFilterHeader = document.getElementById('filter-fecha').value;
+
+            const idFilter = document.getElementById('col-filter-id').value.trim().toLowerCase();
+            const pedidoFilter = document.getElementById('col-filter-pedido').value.trim().toLowerCase();
+            const fechaColFilter = document.getElementById('col-filter-fecha').value;
+            const estadoFilter = document.getElementById('col-filter-estado').value;
+            const seccionFilter = document.getElementById('col-filter-seccion').value.trim().toLowerCase();
+            const referenciaFilter = document.getElementById('col-filter-referencia').value.trim().toLowerCase();
+            const eanFilter = document.getElementById('col-filter-ean').value.trim().toLowerCase();
+            const descripcionFilter = document.getElementById('col-filter-descripcion').value.trim().toLowerCase();
+            const cantidadFilter = document.getElementById('col-filter-cantidad').value.trim().toLowerCase();
+
+            const filteredOrders = pedidosCache.filter(order => {
                 if (tiendaFilter && order.tienda !== tiendaFilter) return false;
                 if (ccFilter && !order.cc.toLowerCase().includes(ccFilter)) return false;
                 if (circuitoFilter && order.circuito !== circuitoFilter) return false;
-                if (fechaFilter) {
+                if (fechaFilterHeader) {
                     const date = new Date(order.fecha);
-                    if (Number.isNaN(date.getTime()) || date.toISOString().split('T')[0] !== fechaFilter) return false;
+                    if (Number.isNaN(date.getTime()) || date.toISOString().split('T')[0] !== fechaFilterHeader) return false;
                 }
                 return true;
             });
-            renderOrders(currentFilteredOrders);
+
+            const allRows = buildFlattenedRows(filteredOrders);
+
+            currentFilteredRows = allRows.filter(row => {
+                const linea = row.linea || {};
+                const ean = getEan(linea.referencia);
+                if (idFilter && !String(row.lineNumber).toLowerCase().includes(idFilter)) return false;
+                if (pedidoFilter && !String(row.order.id).toLowerCase().includes(pedidoFilter)) return false;
+                if (fechaColFilter) {
+                    const date = new Date(row.order.fecha);
+                    if (Number.isNaN(date.getTime()) || date.toISOString().split('T')[0] !== fechaColFilter) return false;
+                }
+                if (estadoFilter && row.estado.value !== estadoFilter) return false;
+                if (seccionFilter && !(linea.seccion || '').toLowerCase().includes(seccionFilter)) return false;
+                if (referenciaFilter && !(linea.referencia || '').toLowerCase().includes(referenciaFilter)) return false;
+                if (eanFilter && !ean.toLowerCase().includes(eanFilter)) return false;
+                if (descripcionFilter && !(linea.designacion || '').toLowerCase().includes(descripcionFilter)) return false;
+                if (cantidadFilter && !String(linea.cantSolicitada ?? '').toLowerCase().includes(cantidadFilter)) return false;
+                return true;
+            });
+
+            renderRows(currentFilteredRows);
+        }
+
+        function renderRows(rows) {
+            const tbody = document.querySelector('#orders-table tbody');
+            tbody.innerHTML = '';
+            if (!rows.length) {
+                const tr = document.createElement('tr');
+                tr.classList.add('empty-row');
+                tr.innerHTML = '<td colspan="11">No hay pedidos para mostrar.</td>';
+                tbody.appendChild(tr);
+                updateBulkApplyState();
+                return;
+            }
+            rows.forEach(row => {
+                const order = row.order;
+                const linea = row.linea || {};
+                const ean = getEan(linea.referencia);
+                const tr = document.createElement('tr');
+                tr.dataset.orderId = order.id;
+                tr.innerHTML = `
+                    <td><input type="checkbox" class="row-checkbox" /></td>
+                    <td>${escapeHtml(row.lineNumber)}</td>
+                    <td>${escapeHtml(order.id)}</td>
+                    <td>${escapeHtml(formatDate(order.fecha))}</td>
+                    <td><span class="badge ${row.estado.cls}">${row.estado.label}</span></td>
+                    <td>${escapeHtml(linea.seccion || '-')}</td>
+                    <td>${escapeHtml(linea.referencia || '-')}</td>
+                    <td>${escapeHtml(ean || '-')}</td>
+                    <td>${escapeHtml(linea.designacion || '-')}</td>
+                    <td>${linea.cantSolicitada !== undefined ? escapeHtml(linea.cantSolicitada) : '-'}</td>
+                    <td>
+                        <button type="button" class="btn-icon details-btn" title="Detalles del pedido">i</button>
+                        <button type="button" class="btn-icon print-btn" title="Imprimir pedido">🖨</button>
+                        <button type="button" class="btn-icon export-btn" title="Exportar pedido a Excel">⬇</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+
+                const detailsRow = document.createElement('tr');
+                detailsRow.classList.add('details-row');
+                detailsRow.style.display = 'none';
+                const detailsCell = document.createElement('td');
+                detailsCell.colSpan = 11;
+                detailsRow.appendChild(detailsCell);
+                tbody.appendChild(detailsRow);
+
+                tr.querySelector('.details-btn').addEventListener('click', () => {
+                    if (detailsRow.style.display === 'none') {
+                        detailsCell.innerHTML = generateOrderHeaderDetails(order);
+                        detailsRow.style.display = '';
+                    } else {
+                        detailsRow.style.display = 'none';
+                    }
+                });
+
+                tr.querySelector('.export-btn').addEventListener('click', async () => {
+                    exportOrderToExcel(order);
+                    await updateOrderState(order, { impreso: true });
+                });
+
+                tr.querySelector('.print-btn').addEventListener('click', async () => {
+                    printOrder(order);
+                    await updateOrderState(order, { impreso: true });
+                });
+
+                tr.querySelector('.row-checkbox').addEventListener('change', updateBulkApplyState);
+            });
+            updateBulkApplyState();
+        }
+
+        function generateOrderHeaderDetails(order) {
+            return `<table class="order-header-table"><tbody>
+                <tr><td>LDAP</td><td>${escapeHtml(order.ldap)}</td></tr>
+                <tr><td>Tienda</td><td>${escapeHtml(order.tienda)}</td></tr>
+                <tr><td>CC</td><td>${escapeHtml(order.cc)}</td></tr>
+                <tr><td>Circuito</td><td>${escapeHtml(order.circuito)}</td></tr>
+            </tbody></table>`;
+        }
+
+        // ---------- selección y aplicación masiva de estado ----------
+        function updateBulkApplyState() {
+            const anyChecked = document.querySelectorAll('.row-checkbox:checked').length > 0;
+            const estadoChosen = document.getElementById('bulk-estado-select').value !== '';
+            document.getElementById('bulk-apply-btn').disabled = !(anyChecked && estadoChosen);
+        }
+
+        async function applyBulkEstado() {
+            const estadoValue = document.getElementById('bulk-estado-select').value;
+            if (!estadoValue) return;
+            const checked = Array.from(document.querySelectorAll('.row-checkbox:checked'));
+            if (!checked.length) return;
+            const orderIds = new Set();
+            checked.forEach(cb => orderIds.add(cb.closest('tr').dataset.orderId));
+            const changes = estadoValueToChanges(estadoValue);
+            const btn = document.getElementById('bulk-apply-btn');
+            btn.disabled = true;
+            btn.textContent = 'Aplicando...';
+            try {
+                for (const orderId of orderIds) {
+                    const order = pedidosCache.find(o => String(o.id) === orderId);
+                    if (order) await updateOrderState(order, changes);
+                }
+                applyFilters();
+            } finally {
+                btn.textContent = '✓ Aplicar';
+                document.getElementById('bulk-estado-select').value = '';
+                updateBulkApplyState();
+            }
         }
 
         async function exportFilteredOrders() {
-            const filtered = currentFilteredOrders.length ? currentFilteredOrders : pedidosCache;
+            const sourceRows = currentFilteredRows.length ? currentFilteredRows : buildFlattenedRows(pedidosCache);
+            const uniqueOrders = new Map();
+            sourceRows.forEach(r => uniqueOrders.set(String(r.order.id), r.order));
+            const filtered = Array.from(uniqueOrders.values());
             if (!filtered.length) {
                 alert('No hay pedidos para exportar.');
                 return;
             }
             const wsData = [];
-            wsData.push(['ID', 'LDAP', 'Tienda', 'CC', 'Circuito', 'Fecha', 'Impreso', 'Preparado']);
+            wsData.push(['ID', 'LDAP', 'Tienda', 'CC', 'Circuito', 'Fecha', 'Estado', 'Impreso', 'Preparado']);
             filtered.forEach(order => {
                 wsData.push([
                     order.id,
@@ -524,6 +889,7 @@
                     order.cc,
                     order.circuito,
                     formatDate(order.fecha),
+                    getOrderEstado(order).label,
                     order.impreso ? 'Sí' : 'No',
                     order.preparado ? 'Sí' : 'No'
                 ]);
@@ -543,9 +909,9 @@
         }
 
         function generateDetailsTable(order) {
-            let html = '<table><thead><tr><th>Referencia</th><th>Designación</th><th>Sección</th><th>Cant. solicitada</th><th>Cant. disponible</th><th>Ubicaciones</th></tr></thead><tbody>';
+            let html = '<table class="details-table"><thead><tr><th>Referencia</th><th>EAN</th><th>Designación</th><th>Sección</th><th>Cant. solicitada</th><th>Cant. disponible</th><th>Ubicaciones</th></tr></thead><tbody>';
             order.lineas.forEach(l => {
-                html += `<tr><td>${escapeHtml(l.referencia)}</td><td>${escapeHtml(l.designacion)}</td><td>${escapeHtml(l.seccion)}</td><td>${escapeHtml(l.cantSolicitada)}</td><td>${escapeHtml(l.cantDisponible)}</td><td>${escapeHtml(l.ubicaciones)}</td></tr>`;
+                html += `<tr><td>${escapeHtml(l.referencia)}</td><td>${escapeHtml(getEan(l.referencia))}</td><td>${escapeHtml(l.designacion)}</td><td>${escapeHtml(l.seccion)}</td><td>${escapeHtml(l.cantSolicitada)}</td><td>${escapeHtml(l.cantDisponible)}</td><td>${escapeHtml(l.ubicaciones)}</td></tr>`;
             });
             html += '</tbody></table>';
             return html;
@@ -558,9 +924,10 @@
             wsData.push(['CC', order.cc]);
             wsData.push(['Circuito', order.circuito]);
             wsData.push(['Fecha', formatDate(order.fecha)]);
+            wsData.push(['Estado', getOrderEstado(order).label]);
             wsData.push([]);
-            wsData.push(['Referencia', 'Designación', 'Sección', 'Cant. solicitada', 'Cant. disponible', 'Ubicaciones']);
-            order.lineas.forEach(l => wsData.push([l.referencia, l.designacion, l.seccion, l.cantSolicitada, l.cantDisponible, l.ubicaciones]));
+            wsData.push(['Referencia', 'EAN', 'Designación', 'Sección', 'Cant. solicitada', 'Cant. disponible', 'Ubicaciones']);
+            order.lineas.forEach(l => wsData.push([l.referencia, getEan(l.referencia), l.designacion, l.seccion, l.cantSolicitada, l.cantDisponible, l.ubicaciones]));
             const worksheet = XLSX.utils.aoa_to_sheet(wsData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, 'Pedido');
@@ -580,6 +947,7 @@
             doc.write(`<tr><td><strong>CC:</strong></td><td>${escapeHtml(order.cc)}</td></tr>`);
             doc.write(`<tr><td><strong>Circuito:</strong></td><td>${escapeHtml(order.circuito)}</td></tr>`);
             doc.write(`<tr><td><strong>Fecha:</strong></td><td>${escapeHtml(formatDate(order.fecha))}</td></tr>`);
+            doc.write(`<tr><td><strong>Estado:</strong></td><td>${escapeHtml(getOrderEstado(order).label)}</td></tr>`);
             doc.write('</tbody></table><h3>Líneas</h3>');
             doc.write(generateDetailsTable(order));
             doc.write('</body></html>');
@@ -594,6 +962,24 @@
             document.getElementById('import-btn').addEventListener('click', importarStock);
             document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
             document.getElementById('export-filtered-btn').addEventListener('click', exportFilteredOrders);
+            document.getElementById('new-pedido-btn').addEventListener('click', () => window.open('stock_pedido.html', '_blank'));
+
+            document.getElementById('bulk-estado-select').addEventListener('change', updateBulkApplyState);
+            document.getElementById('bulk-apply-btn').addEventListener('click', applyBulkEstado);
+            document.getElementById('select-all-checkbox').addEventListener('change', (e) => {
+                document.querySelectorAll('.row-checkbox').forEach(cb => { cb.checked = e.target.checked; });
+                updateBulkApplyState();
+            });
+
+            // filtros por columna: se aplican en vivo
+            ['col-filter-id', 'col-filter-pedido', 'col-filter-fecha', 'col-filter-estado',
+             'col-filter-seccion', 'col-filter-referencia', 'col-filter-ean',
+             'col-filter-descripcion', 'col-filter-cantidad'].forEach(id => {
+                const el = document.getElementById(id);
+                el.addEventListener('input', applyFilters);
+                el.addEventListener('change', applyFilters);
+            });
+
             cargarPedidosSupabase();
             setInterval(cargarPedidosSupabase, REFRESH_INTERVAL_MS);
         });
