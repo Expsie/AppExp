@@ -143,7 +143,7 @@
             border-radius: 10px;
             overflow-x: auto;
         }
-        table { width: 100%; border-collapse: collapse; min-width: 1100px; }
+        table { width: 100%; border-collapse: collapse; min-width: 900px; }
         thead tr.header-row th {
             text-align: left;
             font-size: 12px;
@@ -278,7 +278,10 @@
                 <tr class="filter-row">
                     <th><input type="checkbox" id="select-all-checkbox" /></th>
                     <th><input type="text" id="col-filter-id" placeholder="Filtrar..." /></th>
-                    <th><input type="text" id="col-filter-pedido" placeholder="Filtrar..." /></th>
+                    <th><input type="text" id="col-filter-ldap" placeholder="Filtrar..." /></th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
                     <th><input type="date" id="col-filter-fecha" title="Filtrar por día" /></th>
                     <th>
                         <select id="col-filter-estado">
@@ -288,24 +291,17 @@
                             <option value="preparado">Preparado</option>
                         </select>
                     </th>
-                    <th><input type="text" id="col-filter-seccion" placeholder="Filtrar..." /></th>
-                    <th><input type="text" id="col-filter-referencia" placeholder="Filtrar..." /></th>
-                    <th><input type="text" id="col-filter-ean" placeholder="Filtrar..." /></th>
-                    <th><input type="text" id="col-filter-descripcion" placeholder="Filtrar..." /></th>
-                    <th><input type="text" id="col-filter-cantidad" placeholder="Filtrar..." /></th>
                     <th></th>
                 </tr>
                 <tr class="header-row">
                     <th></th>
-                    <th>id</th>
-                    <th>Nº Pedido</th>
+                    <th>ID</th>
+                    <th>LDAP</th>
+                    <th>Tienda</th>
+                    <th>CC</th>
+                    <th>Circuito</th>
                     <th>Fecha</th>
                     <th>Estado</th>
-                    <th>Sección</th>
-                    <th>Referencia</th>
-                    <th>EAN</th>
-                    <th>Descripción</th>
-                    <th>Cantidad</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -326,7 +322,7 @@
         const REFRESH_INTERVAL_MS = 180000; // 3 minutos
 
         let pedidosCache = [];
-        let currentFilteredRows = [];
+        let currentFilteredOrders = [];
         let activePedidoColumnMap = null;
         let stockEanMap = {};
 
@@ -701,25 +697,6 @@
             return { impreso: false, preparado: false }; // asignado
         }
 
-        // ---------- aplanar pedidos en filas por línea de producto ----------
-        function buildFlattenedRows(orders) {
-            const rows = [];
-            orders.forEach(order => {
-                const estado = getOrderEstado(order);
-                const lineas = (order.lineas && order.lineas.length) ? order.lineas : [null];
-                lineas.forEach((linea, idx) => {
-                    rows.push({
-                        rowId: `${order.id}-${idx + 1}`,
-                        lineNumber: (Number(order.id) || 0) * 100 + idx,
-                        order,
-                        linea,
-                        estado
-                    });
-                });
-            });
-            return rows;
-        }
-
         function applyFilters() {
             const tiendaFilter = document.getElementById('filter-tienda').value;
             const ccFilter = document.getElementById('filter-cc').value.trim().toLowerCase();
@@ -727,16 +704,11 @@
             const fechaFilterHeader = document.getElementById('filter-fecha').value;
 
             const idFilter = document.getElementById('col-filter-id').value.trim().toLowerCase();
-            const pedidoFilter = document.getElementById('col-filter-pedido').value.trim().toLowerCase();
+            const ldapFilter = document.getElementById('col-filter-ldap').value.trim().toLowerCase();
             const fechaColFilter = document.getElementById('col-filter-fecha').value;
             const estadoFilter = document.getElementById('col-filter-estado').value;
-            const seccionFilter = document.getElementById('col-filter-seccion').value.trim().toLowerCase();
-            const referenciaFilter = document.getElementById('col-filter-referencia').value.trim().toLowerCase();
-            const eanFilter = document.getElementById('col-filter-ean').value.trim().toLowerCase();
-            const descripcionFilter = document.getElementById('col-filter-descripcion').value.trim().toLowerCase();
-            const cantidadFilter = document.getElementById('col-filter-cantidad').value.trim().toLowerCase();
 
-            const filteredOrders = pedidosCache.filter(order => {
+            currentFilteredOrders = pedidosCache.filter(order => {
                 if (tiendaFilter && order.tienda !== tiendaFilter) return false;
                 if (ccFilter && !order.cc.toLowerCase().includes(ccFilter)) return false;
                 if (circuitoFilter && order.circuito !== circuitoFilter) return false;
@@ -744,62 +716,45 @@
                     const date = new Date(order.fecha);
                     if (Number.isNaN(date.getTime()) || date.toISOString().split('T')[0] !== fechaFilterHeader) return false;
                 }
-                return true;
-            });
-
-            const allRows = buildFlattenedRows(filteredOrders);
-
-            currentFilteredRows = allRows.filter(row => {
-                const linea = row.linea || {};
-                const ean = getEan(linea.referencia);
-                if (idFilter && !String(row.lineNumber).toLowerCase().includes(idFilter)) return false;
-                if (pedidoFilter && !String(row.order.id).toLowerCase().includes(pedidoFilter)) return false;
+                if (idFilter && !String(order.id).toLowerCase().includes(idFilter)) return false;
+                if (ldapFilter && !order.ldap.toLowerCase().includes(ldapFilter)) return false;
                 if (fechaColFilter) {
-                    const date = new Date(row.order.fecha);
+                    const date = new Date(order.fecha);
                     if (Number.isNaN(date.getTime()) || date.toISOString().split('T')[0] !== fechaColFilter) return false;
                 }
-                if (estadoFilter && row.estado.value !== estadoFilter) return false;
-                if (seccionFilter && !(linea.seccion || '').toLowerCase().includes(seccionFilter)) return false;
-                if (referenciaFilter && !(linea.referencia || '').toLowerCase().includes(referenciaFilter)) return false;
-                if (eanFilter && !ean.toLowerCase().includes(eanFilter)) return false;
-                if (descripcionFilter && !(linea.designacion || '').toLowerCase().includes(descripcionFilter)) return false;
-                if (cantidadFilter && !String(linea.cantSolicitada ?? '').toLowerCase().includes(cantidadFilter)) return false;
+                if (estadoFilter && getOrderEstado(order).value !== estadoFilter) return false;
                 return true;
             });
 
-            renderRows(currentFilteredRows);
+            renderOrders(currentFilteredOrders);
         }
 
-        function renderRows(rows) {
+        function renderOrders(orders) {
             const tbody = document.querySelector('#orders-table tbody');
             tbody.innerHTML = '';
-            if (!rows.length) {
+            if (!orders.length) {
                 const tr = document.createElement('tr');
                 tr.classList.add('empty-row');
-                tr.innerHTML = '<td colspan="11">No hay pedidos para mostrar.</td>';
+                tr.innerHTML = '<td colspan="9">No hay pedidos para mostrar.</td>';
                 tbody.appendChild(tr);
                 updateBulkApplyState();
                 return;
             }
-            rows.forEach(row => {
-                const order = row.order;
-                const linea = row.linea || {};
-                const ean = getEan(linea.referencia);
+            orders.forEach(order => {
+                const estado = getOrderEstado(order);
                 const tr = document.createElement('tr');
                 tr.dataset.orderId = order.id;
                 tr.innerHTML = `
                     <td><input type="checkbox" class="row-checkbox" /></td>
-                    <td>${escapeHtml(row.lineNumber)}</td>
                     <td>${escapeHtml(order.id)}</td>
+                    <td>${escapeHtml(order.ldap)}</td>
+                    <td>${escapeHtml(order.tienda)}</td>
+                    <td>${escapeHtml(order.cc)}</td>
+                    <td>${escapeHtml(order.circuito)}</td>
                     <td>${escapeHtml(formatDate(order.fecha))}</td>
-                    <td><span class="badge ${row.estado.cls}">${row.estado.label}</span></td>
-                    <td>${escapeHtml(linea.seccion || '-')}</td>
-                    <td>${escapeHtml(linea.referencia || '-')}</td>
-                    <td>${escapeHtml(ean || '-')}</td>
-                    <td>${escapeHtml(linea.designacion || '-')}</td>
-                    <td>${linea.cantSolicitada !== undefined ? escapeHtml(linea.cantSolicitada) : '-'}</td>
+                    <td><span class="badge ${estado.cls}">${estado.label}</span></td>
                     <td>
-                        <button type="button" class="btn-icon details-btn" title="Detalles del pedido">i</button>
+                        <button type="button" class="btn-icon details-btn" title="Ver líneas del pedido">▾</button>
                         <button type="button" class="btn-icon print-btn" title="Imprimir pedido">🖨</button>
                         <button type="button" class="btn-icon export-btn" title="Exportar pedido a Excel">⬇</button>
                     </td>
@@ -810,16 +765,22 @@
                 detailsRow.classList.add('details-row');
                 detailsRow.style.display = 'none';
                 const detailsCell = document.createElement('td');
-                detailsCell.colSpan = 11;
+                detailsCell.colSpan = 9;
                 detailsRow.appendChild(detailsCell);
                 tbody.appendChild(detailsRow);
 
-                tr.querySelector('.details-btn').addEventListener('click', () => {
-                    if (detailsRow.style.display === 'none') {
-                        detailsCell.innerHTML = generateOrderHeaderDetails(order);
+                const detailsBtn = tr.querySelector('.details-btn');
+                detailsBtn.addEventListener('click', () => {
+                    const isHidden = detailsRow.style.display === 'none';
+                    if (isHidden) {
+                        detailsCell.innerHTML = (order.lineas && order.lineas.length)
+                            ? generateDetailsTable(order)
+                            : '<p class="muted" style="margin:8px 0;">Este pedido no tiene líneas.</p>';
                         detailsRow.style.display = '';
+                        detailsBtn.textContent = '▴';
                     } else {
                         detailsRow.style.display = 'none';
+                        detailsBtn.textContent = '▾';
                     }
                 });
 
@@ -838,15 +799,6 @@
             updateBulkApplyState();
         }
 
-        function generateOrderHeaderDetails(order) {
-            return `<table class="order-header-table"><tbody>
-                <tr><td>LDAP</td><td>${escapeHtml(order.ldap)}</td></tr>
-                <tr><td>Tienda</td><td>${escapeHtml(order.tienda)}</td></tr>
-                <tr><td>CC</td><td>${escapeHtml(order.cc)}</td></tr>
-                <tr><td>Circuito</td><td>${escapeHtml(order.circuito)}</td></tr>
-            </tbody></table>`;
-        }
-
         // ---------- selección y aplicación masiva de estado ----------
         function updateBulkApplyState() {
             const anyChecked = document.querySelectorAll('.row-checkbox:checked').length > 0;
@@ -859,8 +811,7 @@
             if (!estadoValue) return;
             const checked = Array.from(document.querySelectorAll('.row-checkbox:checked'));
             if (!checked.length) return;
-            const orderIds = new Set();
-            checked.forEach(cb => orderIds.add(cb.closest('tr').dataset.orderId));
+            const orderIds = checked.map(cb => cb.closest('tr').dataset.orderId);
             const changes = estadoValueToChanges(estadoValue);
             const btn = document.getElementById('bulk-apply-btn');
             btn.disabled = true;
@@ -879,10 +830,7 @@
         }
 
         async function exportFilteredOrders() {
-            const sourceRows = currentFilteredRows.length ? currentFilteredRows : buildFlattenedRows(pedidosCache);
-            const uniqueOrders = new Map();
-            sourceRows.forEach(r => uniqueOrders.set(String(r.order.id), r.order));
-            const filtered = Array.from(uniqueOrders.values());
+            const filtered = currentFilteredOrders.length ? currentFilteredOrders : pedidosCache;
             if (!filtered.length) {
                 alert('No hay pedidos para exportar.');
                 return;
@@ -983,9 +931,7 @@
             });
 
             // filtros por columna: se aplican en vivo
-            ['col-filter-id', 'col-filter-pedido', 'col-filter-fecha', 'col-filter-estado',
-             'col-filter-seccion', 'col-filter-referencia', 'col-filter-ean',
-             'col-filter-descripcion', 'col-filter-cantidad'].forEach(id => {
+            ['col-filter-id', 'col-filter-ldap', 'col-filter-fecha', 'col-filter-estado'].forEach(id => {
                 const el = document.getElementById(id);
                 el.addEventListener('input', applyFilters);
                 el.addEventListener('change', applyFilters);
