@@ -224,10 +224,7 @@
                 <label for="import-stock">Archivo Excel</label>
                 <input type="file" id="import-stock" accept=".xlsx,.xls" style="width:100%;max-width:420px;" />
             </div>
-            <div class="field">
-                <label for="stock-url">URL del archivo en Drive (opcional)</label>
-                <input type="url" id="stock-url" placeholder="https://drive.google.com/…" style="width:100%;max-width:420px;" />
-            </div>
+            <p class="muted" id="last-import-info">Última integración: cargando…</p>
             <button type="button" id="import-btn" class="btn btn-outline">Importar stock a Supabase</button>
             <span id="import-status" class="status"></span>
         </div>
@@ -451,15 +448,7 @@
             return `select=${columns.map(encodeURIComponent).join(',')}&limit=0`;
         }
 
-        function extractDriveFileId(url) {
-            const match1 = url.match(/\/file\/d\/([^/]+)\/|\/uc\?id=([^&]+)/);
-            if (match1) return match1[1] || match1[2];
-            const match2 = url.match(/[?&]id=([^&]+)/);
-            if (match2) return match2[1];
-            return null;
-        }
-
-        function mapExcelRowsToStock(rows) {
+        function mapExcelRowsToStock(rows, importTimestamp) {
             const normalizedRows = rows.map(r => {
                 const obj = {};
                 for (const key of Object.keys(r)) obj[normalizeKey(key)] = r[key];
@@ -474,7 +463,8 @@
                 "EAN code": toText(r.eancode || ''),
                 "Product name": toText(r.productname || ''),
                 "Department": toText(r.department || ''),
-                "Qty": toNumber(r.qty || 0)
+                "Qty": toNumber(r.qty || 0),
+                "Fecha Importacion": importTimestamp
             })).filter(item => item["Product Code"]);
         }
 
@@ -505,30 +495,21 @@
 
         async function importarStock() {
             const fileInput = document.getElementById('import-stock');
-            const urlInput = document.getElementById('stock-url');
             let arrayBuffer;
             setImportStatus('', true);
             if (!confirm('La importación reemplazará todos los registros actuales de StockDispo. ¿Continuar?')) return;
             try {
                 if (fileInput.files && fileInput.files.length > 0) {
                     arrayBuffer = await fileInput.files[0].arrayBuffer();
-                } else if (urlInput.value.trim()) {
-                    let url = urlInput.value.trim();
-                    if (url.includes('drive.google.com')) {
-                        const fileId = extractDriveFileId(url);
-                        if (fileId) url = `https://drive.google.com/uc?export=download&id=${fileId}`;
-                    }
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error('Error al descargar el archivo desde la URL.');
-                    arrayBuffer = await response.arrayBuffer();
                 } else {
-                    setImportStatus('Selecciona un archivo o introduce una URL.', false);
+                    setImportStatus('Selecciona un archivo Excel.', false);
                     return;
                 }
                 const workbook = XLSX.read(arrayBuffer, { type: 'array' });
                 const sheet = workbook.Sheets[workbook.SheetNames[0]];
                 const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-                const articles = mapExcelRowsToStock(rows);
+                const importTimestamp = new Date().toISOString();
+                const articles = mapExcelRowsToStock(rows, importTimestamp);
                 if (!articles.length) {
                     setImportStatus('No se encontraron artículos válidos en el Excel.', false);
                     return;
@@ -537,9 +518,29 @@
                 await reemplazarStockSupabase(articles);
                 setImportStatus(`Se importaron ${articles.length} artículos en StockDispo.`, true);
                 await cargarEanMap();
+                updateLastImportDisplay(importTimestamp);
             } catch (error) {
                 console.error(error);
                 setImportStatus(error.message || 'Error al importar el archivo.', false);
+            }
+        }
+
+        // ---------- fecha de la última integración de stock ----------
+        function updateLastImportDisplay(value) {
+            const el = document.getElementById('last-import-info');
+            if (!el) return;
+            el.textContent = value ? `Última integración: ${formatDate(value)}` : 'Última integración: sin datos todavía.';
+        }
+
+        async function cargarUltimaImportacion() {
+            try {
+                const query = `select=${encodeURIComponent('Fecha Importacion')}&order=${encodeURIComponent('Fecha Importacion')}.desc.nullslast&limit=1`;
+                const rows = await supabaseRequest(SUPABASE_CONFIG.stockTable, { query });
+                const value = Array.isArray(rows) && rows[0] ? rows[0]['Fecha Importacion'] : null;
+                updateLastImportDisplay(value);
+            } catch (error) {
+                console.error('No se pudo obtener la fecha de la última integración de stock.', error);
+                updateLastImportDisplay(null);
             }
         }
 
@@ -958,7 +959,10 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('refresh-orders-btn').addEventListener('click', cargarPedidosSupabase);
+            document.getElementById('refresh-orders-btn').addEventListener('click', () => {
+                cargarPedidosSupabase();
+                cargarUltimaImportacion();
+            });
             document.getElementById('import-btn').addEventListener('click', importarStock);
             document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
             document.getElementById('export-filtered-btn').addEventListener('click', exportFilteredOrders);
@@ -981,6 +985,7 @@
             });
 
             cargarPedidosSupabase();
+            cargarUltimaImportacion();
             setInterval(cargarPedidosSupabase, REFRESH_INTERVAL_MS);
         });
     </script>
