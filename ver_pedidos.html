@@ -514,6 +514,13 @@
                     setImportStatus('No se encontraron artículos válidos en el Excel.', false);
                     return;
                 }
+                setImportStatus('Comprobando la tabla StockDispo...', true);
+                try {
+                    await supabaseRequest(SUPABASE_CONFIG.stockTable, { query: selectQueryForColumns(['Fecha Importacion']) });
+                } catch (columnError) {
+                    setImportStatus("No existe la columna 'Fecha Importacion' en StockDispo. Añádela en Supabase (texto o timestamp) antes de importar. No se ha tocado el stock actual.", false);
+                    return;
+                }
                 setImportStatus('Subiendo stock a Supabase...', true);
                 await reemplazarStockSupabase(articles);
                 setImportStatus(`Se importaron ${articles.length} artículos en StockDispo.`, true);
