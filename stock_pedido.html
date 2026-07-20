@@ -639,8 +639,39 @@
             `;
             tbody.appendChild(tr);
             const refInput = tr.querySelector('.ref-input');
+            const cantInput = tr.querySelector('.cant-solicitada-input');
             refInput.addEventListener('blur', () => buscarArticulo(refInput, tr));
+            refInput.addEventListener('keydown', async (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    await buscarArticulo(refInput, tr);
+                    cantInput.focus();
+                    cantInput.select();
+                }
+            });
+            cantInput.addEventListener('input', () => validarCantidadSolicitada(tr));
+            cantInput.addEventListener('blur', () => validarCantidadSolicitada(tr, true));
             tr.querySelector('.delete-line-btn').addEventListener('click', () => tr.remove());
+        }
+
+        // Evita solicitar más unidades de las que hay disponibles en la tienda solicitante.
+        function validarCantidadSolicitada(row, corregir = false) {
+            const cantInput = row.querySelector('.cant-solicitada-input');
+            const disponibleText = row.querySelector('.cant-disponible-cell').textContent.trim();
+            const disponible = disponibleText === '' ? null : toNumber(disponibleText);
+            const solicitada = toNumber(cantInput.value);
+            if (disponible === null) return true;
+            if (solicitada > disponible) {
+                cantInput.style.borderColor = '#b3261e';
+                if (corregir) {
+                    alert(`Solo hay ${disponible} unidades disponibles en esta tienda. Se ajusta la cantidad al máximo disponible.`);
+                    cantInput.value = disponible;
+                    cantInput.style.borderColor = '';
+                }
+                return false;
+            }
+            cantInput.style.borderColor = '';
+            return true;
         }
 
         function sameText(a, b) {
@@ -696,12 +727,14 @@
             const cantDisponibleCell = row.querySelector('.cant-disponible-cell');
             const ubicacionesCell = row.querySelector('.ubicaciones-cell');
             const ssccCell = row.querySelector('.sscc-cell');
+            const cantInput = row.querySelector('.cant-solicitada-input');
             if (!referencia) {
                 designacionCell.textContent = '';
                 seccionCell.textContent = '';
                 cantDisponibleCell.textContent = '';
                 ubicacionesCell.textContent = '';
                 ssccCell.textContent = '';
+                cantInput.removeAttribute('max');
                 return;
             }
             if (!tienda) {
@@ -710,6 +743,8 @@
                 cantDisponibleCell.textContent = '0';
                 ubicacionesCell.textContent = '';
                 ssccCell.textContent = '';
+                cantInput.max = 0;
+                validarCantidadSolicitada(row);
                 return;
             }
             if (!stockCache.length) await cargarDatosSupabase();
@@ -720,6 +755,8 @@
                 cantDisponibleCell.textContent = '0';
                 ubicacionesCell.textContent = '';
                 ssccCell.textContent = '';
+                cantInput.max = 0;
+                validarCantidadSolicitada(row);
                 return;
             }
             const reservado = calcularReservado(referencia, tienda);
@@ -729,6 +766,8 @@
             cantDisponibleCell.textContent = disponible;
             ubicacionesCell.textContent = article.ubicaciones;
             ssccCell.textContent = article.sscc;
+            cantInput.max = disponible;
+            validarCantidadSolicitada(row);
         }
 
         async function recalcularLineas() {
@@ -773,6 +812,10 @@
                 }
                 if (designacion === 'No encontrado' || designacion === 'Selecciona tienda') {
                     alert(`La referencia ${ref} no está validada contra StockDispo.`);
+                    return;
+                }
+                if (cantSolicitada > cantDisponible) {
+                    alert(`La referencia ${ref} solicita ${cantSolicitada} unidades pero solo hay ${cantDisponible} disponibles en esta tienda.`);
                     return;
                 }
                 lineas.push({ referencia: ref, designacion, seccion, cantSolicitada, cantDisponible, ubicaciones, sscc });
