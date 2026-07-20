@@ -707,7 +707,17 @@
             const matches = stockCache.filter(item => sameText(item.referencia, referencia) && sameTienda(item.tienda, tienda));
             if (!matches.length) return null;
             const stockTotal = matches.reduce((sum, item) => sum + toNumber(item.stockDisponible), 0);
-            const ubicaciones = [...new Set(matches.map(m => m.ubicaciones).filter(Boolean))].join('; ');
+            // Suma el stock por cada ubicación distinta y lo muestra entre paréntesis
+            // junto a esa ubicación, p.ej. "Pasillo 3 (25); Muelle 2 (10)".
+            const stockPorUbicacion = new Map();
+            matches.forEach(m => {
+                if (!m.ubicaciones) return;
+                const actual = stockPorUbicacion.get(m.ubicaciones) || 0;
+                stockPorUbicacion.set(m.ubicaciones, actual + toNumber(m.stockDisponible));
+            });
+            const ubicaciones = [...stockPorUbicacion.entries()]
+                .map(([ubicacion, stock]) => `${ubicacion} (${stock})`)
+                .join('; ');
             const sscc = [...new Set(matches.map(m => m.sscc).filter(Boolean))].join('; ');
             return {
                 referencia,
