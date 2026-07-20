@@ -192,6 +192,9 @@
         .badge-orange { background: var(--orange-bg); color: var(--orange-text); }
         .badge-green { background: var(--green-bg); color: var(--green-text); }
 
+        .check-yes { color: var(--green-text); font-weight: 700; font-size: 16px; }
+        .check-no { color: var(--muted); }
+
         .order-header-table { border-collapse: collapse; font-size: 13px; }
         .order-header-table td { padding: 4px 10px; border: none; }
         .order-header-table td:first-child { color: var(--muted); font-weight: 600; }
@@ -263,8 +266,8 @@
         <button type="button" id="new-pedido-btn" class="btn btn-primary">+ Pedido</button>
         <select id="bulk-estado-select" class="select-estado">
             <option value="">Seleccione estado</option>
-            <option value="asignado">Asignado</option>
             <option value="en_preparacion">En preparación</option>
+            <option value="asignado">Asignado</option>
             <option value="preparado">Preparado</option>
         </select>
         <button type="button" id="bulk-apply-btn" class="btn btn-outline" disabled>✓ Aplicar</button>
@@ -286,11 +289,12 @@
                     <th>
                         <select id="col-filter-estado">
                             <option value="">Filtrar...</option>
-                            <option value="asignado">Asignado</option>
                             <option value="en_preparacion">En preparación</option>
+                            <option value="asignado">Asignado</option>
                             <option value="preparado">Preparado</option>
                         </select>
                     </th>
+                    <th></th>
                     <th></th>
                 </tr>
                 <tr class="header-row">
@@ -302,6 +306,7 @@
                     <th>Circuito</th>
                     <th>Fecha</th>
                     <th>Estado</th>
+                    <th>Impreso</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -706,14 +711,14 @@
         // ---------- estado derivado de impreso/preparado ----------
         function getOrderEstado(order) {
             if (order.preparado) return { value: 'preparado', label: 'PREPARADO', cls: 'badge-green' };
-            if (order.impreso) return { value: 'en_preparacion', label: 'EN PREPARACIÓN', cls: 'badge-orange' };
-            return { value: 'asignado', label: 'ASIGNADO', cls: 'badge-purple' };
+            if (order.impreso) return { value: 'asignado', label: 'ASIGNADO', cls: 'badge-purple' };
+            return { value: 'en_preparacion', label: 'EN PREPARACIÓN', cls: 'badge-orange' };
         }
 
         function estadoValueToChanges(value) {
             if (value === 'preparado') return { impreso: true, preparado: true };
-            if (value === 'en_preparacion') return { impreso: true, preparado: false };
-            return { impreso: false, preparado: false }; // asignado
+            if (value === 'asignado') return { impreso: true, preparado: false };
+            return { impreso: false, preparado: false }; // en_preparacion
         }
 
         function applyFilters() {
@@ -754,7 +759,7 @@
             if (!orders.length) {
                 const tr = document.createElement('tr');
                 tr.classList.add('empty-row');
-                tr.innerHTML = '<td colspan="9">No hay pedidos para mostrar.</td>';
+                tr.innerHTML = '<td colspan="10">No hay pedidos para mostrar.</td>';
                 tbody.appendChild(tr);
                 updateBulkApplyState();
                 return;
@@ -772,9 +777,10 @@
                     <td>${escapeHtml(order.circuito)}</td>
                     <td>${escapeHtml(formatDate(order.fecha))}</td>
                     <td><span class="badge ${estado.cls}">${estado.label}</span></td>
+                    <td style="text-align:center;">${order.impreso ? '<span class="check-yes" title="Impreso">✔</span>' : '<span class="check-no" title="No impreso">—</span>'}</td>
                     <td>
                         <button type="button" class="btn-icon details-btn" title="Ver líneas del pedido">▾</button>
-                        <button type="button" class="btn-icon print-btn" title="Imprimir pedido">🖨</button>
+                        <button type="button" class="btn-icon print-btn" title="Imprimir bono + etiqueta">🖨</button>
                         <button type="button" class="btn-icon export-btn" title="Exportar pedido a Excel">⬇</button>
                     </td>
                 `;
@@ -784,7 +790,7 @@
                 detailsRow.classList.add('details-row');
                 detailsRow.style.display = 'none';
                 const detailsCell = document.createElement('td');
-                detailsCell.colSpan = 9;
+                detailsCell.colSpan = 10;
                 detailsRow.appendChild(detailsCell);
                 tbody.appendChild(detailsRow);
 
@@ -809,7 +815,12 @@
                 });
 
                 tr.querySelector('.print-btn').addEventListener('click', async () => {
+                    // Dos peticiones de impresión independientes: bono y etiqueta.
+                    // Cada una abre su propio diálogo de impresión, así el usuario
+                    // puede enviar cada una a una impresora distinta (p.ej. la
+                    // etiqueta a la Monarch Lp501i065 / 10.24.113.173).
                     printOrder(order);
+                    printLabel(order);
                     await updateOrderState(order, { impreso: true });
                 });
 
@@ -925,6 +936,60 @@
             doc.write(`<tr><td><strong>Estado:</strong></td><td>${escapeHtml(getOrderEstado(order).label)}</td></tr>`);
             doc.write('</tbody></table><h3>Líneas</h3>');
             doc.write(generateDetailsTable(order));
+            doc.write('</body></html>');
+            doc.close();
+            printWindow.focus();
+            printWindow.print();
+            printWindow.close();
+        }
+
+        // Etiqueta de 10 cm de ancho x 15 cm de largo, pensada para salir por la
+        // impresora de etiquetas Monarch "Lp501i065" (10.24.113.173). El navegador
+        // no puede enviar el trabajo directamente a esa IP; esta es una petición de
+        // impresión independiente para que, en el diálogo de impresión, se elija
+        // esa impresora (si está instalada como impresora del sistema/red).
+        function printLabel(order) {
+            const numLineas = (order.lineas && order.lineas.length) || 0;
+            const printWindow = window.open('', '_blank', 'width=420,height=620');
+            const doc = printWindow.document;
+            doc.write('<html><head><title>Etiqueta pedido</title>');
+            doc.write(`
+                <style>
+                    @page { size: 10cm 15cm; margin: 0; }
+                    * { box-sizing: border-box; }
+                    body {
+                        width: 10cm;
+                        height: 15cm;
+                        margin: 0;
+                        padding: 0.5cm;
+                        font-family: Arial, Helvetica, sans-serif;
+                        color: #000;
+                        display: flex;
+                        flex-direction: column;
+                    }
+                    .label-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
+                    .label-header .empresa { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; }
+                    .label-header .pedido-id { font-size: 30px; font-weight: 800; margin-top: 2px; }
+                    .label-field { margin-bottom: 8px; }
+                    .label-field .k { font-size: 10px; text-transform: uppercase; color: #444; letter-spacing: 0.04em; }
+                    .label-field .v { font-size: 16px; font-weight: 700; }
+                    .label-footer { margin-top: auto; text-align: center; font-size: 10px; color: #444; border-top: 1px solid #999; padding-top: 6px; }
+                </style>
+            `);
+            doc.write('</head><body>');
+            doc.write(`
+                <div class="label-header">
+                    <div class="empresa">Leroy Merlin &middot; LLS</div>
+                    <div class="pedido-id">PEDIDO #${escapeHtml(order.id)}</div>
+                </div>
+                <div class="label-field"><div class="k">Tienda</div><div class="v">${escapeHtml(order.tienda)}</div></div>
+                <div class="label-field"><div class="k">Circuito</div><div class="v">${escapeHtml(order.circuito)}</div></div>
+                <div class="label-field"><div class="k">CC</div><div class="v">${escapeHtml(order.cc)}</div></div>
+                <div class="label-field"><div class="k">LDAP</div><div class="v">${escapeHtml(order.ldap)}</div></div>
+                <div class="label-field"><div class="k">Fecha</div><div class="v">${escapeHtml(formatDate(order.fecha))}</div></div>
+                <div class="label-field"><div class="k">Líneas</div><div class="v">${numLineas}</div></div>
+                <div class="label-footer">Impresora: Lp501i065 &middot; 10.24.113.173</div>
+            `);
             doc.write('</body></html>');
             doc.close();
             printWindow.focus();
