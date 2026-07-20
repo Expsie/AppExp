@@ -520,18 +520,37 @@
             };
         }
 
+        // Supabase/PostgREST limita cada respuesta (normalmente a 1000 filas).
+        // Esta función pagina automáticamente hasta traer la tabla completa.
+        async function fetchAllRows(tableName, baseQuery = 'select=*') {
+            const pageSize = 1000;
+            let offset = 0;
+            let allRows = [];
+            while (true) {
+                const separator = baseQuery.includes('?') ? '&' : (baseQuery ? '&' : '');
+                const query = `${baseQuery}${separator}limit=${pageSize}&offset=${offset}`;
+                const rows = await supabaseRequest(tableName, { query });
+                if (!Array.isArray(rows) || rows.length === 0) break;
+                allRows = allRows.concat(rows);
+                if (rows.length < pageSize) break;
+                offset += pageSize;
+            }
+            return allRows;
+        }
+
         async function fetchStock() {
-            const rows = await supabaseRequest(SUPABASE_CONFIG.stockTable, { query: 'select=*' });
-            return Array.isArray(rows) ? rows.map(normalizeStockRow).filter(item => item.referencia) : [];
+            const rows = await fetchAllRows(SUPABASE_CONFIG.stockTable, 'select=*');
+            return rows.map(normalizeStockRow).filter(item => item.referencia);
         }
 
         async function fetchPedidos() {
-            const queries = ['select=*&order=Fecha.desc', 'select=*&order=fecha.desc', 'select=*'];
+            const orderClauses = ['order=Fecha.desc', 'order=fecha.desc', ''];
             let lastError = null;
-            for (const query of queries) {
+            for (const orderClause of orderClauses) {
                 try {
-                    const rows = await supabaseRequest(SUPABASE_CONFIG.pedidosTable, { query });
-                    return Array.isArray(rows) ? rows.map(normalizePedidoRow) : [];
+                    const baseQuery = orderClause ? `select=*&${orderClause}` : 'select=*';
+                    const rows = await fetchAllRows(SUPABASE_CONFIG.pedidosTable, baseQuery);
+                    return rows.map(normalizePedidoRow);
                 } catch (error) {
                     lastError = error;
                 }
