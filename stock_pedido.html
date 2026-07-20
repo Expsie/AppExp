@@ -121,7 +121,7 @@
             border-radius: 10px;
             overflow-x: auto;
         }
-        table { width: 100%; border-collapse: collapse; min-width: 760px; }
+        table { width: 100%; border-collapse: collapse; min-width: 860px; }
         thead th {
             text-align: left;
             font-size: 12px;
@@ -223,6 +223,7 @@
                         <th>Cant. solicitada</th>
                         <th>Cant. disponible</th>
                         <th>Ubicaciones</th>
+                        <th>SSCC</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -614,6 +615,7 @@
                 <td><input type="number" class="cant-solicitada-input" min="1" value="1" /></td>
                 <td class="cant-disponible-cell"></td>
                 <td class="ubicaciones-cell"></td>
+                <td class="sscc-cell"></td>
                 <td><button type="button" class="btn-icon delete-line-btn" title="Eliminar línea">×</button></td>
             `;
             tbody.appendChild(tr);
@@ -626,13 +628,45 @@
             return toText(a).toLowerCase() === toText(b).toLowerCase();
         }
 
+        // Compara códigos de tienda de forma tolerante a variaciones de formato
+        // (espacios, mayúsculas, ceros a la izquierda: "T006" == "T6" == "t006").
+        function normalizeTiendaCode(value) {
+            const text = toText(value).toUpperCase().replace(/\s+/g, '');
+            const match = text.match(/^([A-Z]*)0*(\d+)$/);
+            if (match) return `${match[1]}${match[2]}`;
+            return text;
+        }
+
+        function sameTienda(a, b) {
+            return normalizeTiendaCode(a) === normalizeTiendaCode(b);
+        }
+
         function calcularReservado(referencia, tienda) {
             return pedidosCache.reduce((total, pedido) => {
-                if (pedido.preparado || !sameText(pedido.tienda, tienda)) return total;
+                if (pedido.preparado || !sameTienda(pedido.tienda, tienda)) return total;
                 return total + pedido.lineas.reduce((subtotal, linea) => {
                     return sameText(linea.referencia, referencia) ? subtotal + toNumber(linea.cantSolicitada) : subtotal;
                 }, 0);
             }, 0);
+        }
+
+        // Un mismo artículo puede estar repartido en varias filas de StockDispo
+        // (una por SSCC/palé). Hay que sumar todas las coincidencias de esa tienda,
+        // no solo quedarnos con la primera.
+        function buscarArticuloAgregado(referencia, tienda) {
+            const matches = stockCache.filter(item => sameText(item.referencia, referencia) && sameTienda(item.tienda, tienda));
+            if (!matches.length) return null;
+            const stockTotal = matches.reduce((sum, item) => sum + toNumber(item.stockDisponible), 0);
+            const ubicaciones = [...new Set(matches.map(m => m.ubicaciones).filter(Boolean))].join('; ');
+            const sscc = [...new Set(matches.map(m => m.sscc).filter(Boolean))].join('; ');
+            return {
+                referencia,
+                designacion: matches[0].designacion,
+                seccion: matches[0].seccion,
+                stockDisponible: stockTotal,
+                ubicaciones,
+                sscc
+            };
         }
 
         async function buscarArticulo(refInput, row) {
@@ -642,11 +676,13 @@
             const seccionCell = row.querySelector('.seccion-cell');
             const cantDisponibleCell = row.querySelector('.cant-disponible-cell');
             const ubicacionesCell = row.querySelector('.ubicaciones-cell');
+            const ssccCell = row.querySelector('.sscc-cell');
             if (!referencia) {
                 designacionCell.textContent = '';
                 seccionCell.textContent = '';
                 cantDisponibleCell.textContent = '';
                 ubicacionesCell.textContent = '';
+                ssccCell.textContent = '';
                 return;
             }
             if (!tienda) {
@@ -654,15 +690,17 @@
                 seccionCell.textContent = '-';
                 cantDisponibleCell.textContent = '0';
                 ubicacionesCell.textContent = '';
+                ssccCell.textContent = '';
                 return;
             }
             if (!stockCache.length) await cargarDatosSupabase();
-            const article = stockCache.find(item => sameText(item.referencia, referencia) && sameText(item.tienda, tienda));
+            const article = buscarArticuloAgregado(referencia, tienda);
             if (!article) {
                 designacionCell.textContent = 'No encontrado';
                 seccionCell.textContent = '-';
                 cantDisponibleCell.textContent = '0';
                 ubicacionesCell.textContent = '';
+                ssccCell.textContent = '';
                 return;
             }
             const reservado = calcularReservado(referencia, tienda);
@@ -671,6 +709,7 @@
             seccionCell.textContent = article.seccion;
             cantDisponibleCell.textContent = disponible;
             ubicacionesCell.textContent = article.ubicaciones;
+            ssccCell.textContent = article.sscc;
         }
 
         async function recalcularLineas() {
@@ -704,6 +743,7 @@
                 const cantSolicitada = toNumber(row.querySelector('.cant-solicitada-input').value);
                 const cantDisponible = toNumber(row.querySelector('.cant-disponible-cell').textContent);
                 const ubicaciones = row.querySelector('.ubicaciones-cell').textContent.trim();
+                const sscc = row.querySelector('.sscc-cell').textContent.trim();
                 if (!ref) {
                     alert('Todas las líneas deben tener referencia.');
                     return;
@@ -716,7 +756,7 @@
                     alert(`La referencia ${ref} no está validada contra StockDispo.`);
                     return;
                 }
-                lineas.push({ referencia: ref, designacion, seccion, cantSolicitada, cantDisponible, ubicaciones });
+                lineas.push({ referencia: ref, designacion, seccion, cantSolicitada, cantDisponible, ubicaciones, sscc });
             }
             const pedido = {
                 ldap,

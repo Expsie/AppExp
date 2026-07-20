@@ -865,9 +865,9 @@
         }
 
         function generateDetailsTable(order) {
-            let html = '<table class="details-table"><thead><tr><th>Referencia</th><th>EAN</th><th>Designación</th><th>Sección</th><th>Cant. solicitada</th><th>Cant. disponible</th><th>Ubicaciones</th></tr></thead><tbody>';
+            let html = '<table class="details-table"><thead><tr><th>Referencia</th><th>EAN</th><th>Designación</th><th>Sección</th><th>Cant. solicitada</th><th>Cant. disponible</th><th>Ubicaciones</th><th>SSCC</th></tr></thead><tbody>';
             order.lineas.forEach(l => {
-                html += `<tr><td>${escapeHtml(l.referencia)}</td><td>${escapeHtml(getEan(l.referencia))}</td><td>${escapeHtml(l.designacion)}</td><td>${escapeHtml(l.seccion)}</td><td>${escapeHtml(l.cantSolicitada)}</td><td>${escapeHtml(l.cantDisponible)}</td><td>${escapeHtml(l.ubicaciones)}</td></tr>`;
+                html += `<tr><td>${escapeHtml(l.referencia)}</td><td>${escapeHtml(getEan(l.referencia))}</td><td>${escapeHtml(l.designacion)}</td><td>${escapeHtml(l.seccion)}</td><td>${escapeHtml(l.cantSolicitada)}</td><td>${escapeHtml(l.cantDisponible)}</td><td>${escapeHtml(l.ubicaciones)}</td><td>${escapeHtml(l.sscc || '')}</td></tr>`;
             });
             html += '</tbody></table>';
             return html;
@@ -882,8 +882,8 @@
             wsData.push(['Fecha', formatDate(order.fecha)]);
             wsData.push(['Estado', getOrderEstado(order).label]);
             wsData.push([]);
-            wsData.push(['Referencia', 'EAN', 'Designación', 'Sección', 'Cant. solicitada', 'Cant. disponible', 'Ubicaciones']);
-            order.lineas.forEach(l => wsData.push([l.referencia, getEan(l.referencia), l.designacion, l.seccion, l.cantSolicitada, l.cantDisponible, l.ubicaciones]));
+            wsData.push(['Referencia', 'EAN', 'Designación', 'Sección', 'Cant. solicitada', 'Cant. disponible', 'Ubicaciones', 'SSCC']);
+            order.lineas.forEach(l => wsData.push([l.referencia, getEan(l.referencia), l.designacion, l.seccion, l.cantSolicitada, l.cantDisponible, l.ubicaciones, l.sscc || '']));
             const worksheet = XLSX.utils.aoa_to_sheet(wsData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, 'Pedido');
