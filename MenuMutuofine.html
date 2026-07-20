@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SISTEMA GESTIÓN LLS Leroy Merlin</title>
+    <style>
+        :root {
+            --bg: #f5f6f8;
+            --surface: #ffffff;
+            --border: #e5e7eb;
+            --text: #1f2430;
+            --muted: #6b7280;
+            --accent-green: #4caf50;
+            --accent-green-dark: #3d9140;
+            --purple-bg: #ede3fb;
+            --purple-text: #7c3aed;
+            --orange-bg: #fdecd1;
+            --orange-text: #c2740b;
+            --green-bg: #dcf5e3;
+            --green-text: #1e8a4c;
+            --blue: #2563eb;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", Roboto, Arial, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .page { width: 100%; max-width: 920px; }
+
+        .brand {
+            text-align: center;
+            margin-bottom: 36px;
+        }
+        .brand .tag {
+            display: inline-block;
+            background: var(--green-bg);
+            color: var(--green-text);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 5px 14px;
+            border-radius: 999px;
+            margin-bottom: 14px;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 800;
+            margin: 0 0 8px 0;
+            letter-spacing: 0.01em;
+        }
+        h1 span { color: var(--accent-green); }
+        .subtitle {
+            color: var(--muted);
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 28px 26px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            text-decoration: none;
+            color: var(--text);
+            transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .card:hover {
+            border-color: var(--accent-green);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 24px rgba(31, 36, 48, 0.08);
+        }
+        .card .icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+        }
+        .card.stock .icon { background: var(--purple-bg); color: var(--purple-text); }
+        .card.pedidos .icon { background: var(--orange-bg); color: var(--orange-text); }
+        .card h2 {
+            font-size: 17px;
+            margin: 0;
+        }
+        .card p {
+            margin: 0;
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.5;
+            flex: 1;
+        }
+        .card .enter {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--accent-green-dark);
+        }
+        .card .enter .arrow { transition: transform 0.15s ease; }
+        .card:hover .enter .arrow { transform: translateX(3px); }
+
+        footer {
+            text-align: center;
+            margin-top: 28px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <div class="brand">
+        <span class="tag">Logística LLS</span>
+        <h1>SISTEMA GESTIÓN LLS <span>Leroy Merlin</span></h1>
+        <p class="subtitle">Selecciona la herramienta a la que quieres acceder</p>
+    </div>
+
+    <div class="cards">
+        <a class="card stock" href="stock_pedido.html">
+            <div class="icon">📦</div>
+            <h2>Gestor de stock y pedidos</h2>
+            <p>Crea un pedido de stock validado en tiempo real contra el stock disponible de la tienda solicitante.</p>
+            <span class="enter">Entrar <span class="arrow">→</span></span>
+        </a>
+
+        <a class="card pedidos" href="ver_pedidos.html">
+            <div class="icon">📋</div>
+            <h2>Ver pedidos guardados</h2>
+            <p>Consulta, filtra y cambia el estado (Asignado / En preparación / Preparado) de todos los pedidos registrados.</p>
+            <span class="enter">Entrar <span class="arrow">→</span></span>
+        </a>
+    </div>
+
+    <footer>Conectado a Supabase &middot; PedidoMutuOfline &amp; StockDispo</footer>
+</div>
+</body>
+</html>
