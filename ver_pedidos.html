@@ -780,7 +780,8 @@
                     <td style="text-align:center;">${order.impreso ? '<span class="check-yes" title="Impreso">✔</span>' : '<span class="check-no" title="No impreso">—</span>'}</td>
                     <td>
                         <button type="button" class="btn-icon details-btn" title="Ver líneas del pedido">▾</button>
-                        <button type="button" class="btn-icon print-btn" title="Imprimir bono + etiqueta">🖨</button>
+                        <button type="button" class="btn-icon print-btn" title="Imprimir bono de preparación">🖨</button>
+                        <button type="button" class="btn-icon label-btn" title="Imprimir etiqueta">🏷</button>
                         <button type="button" class="btn-icon export-btn" title="Exportar pedido a Excel">⬇</button>
                     </td>
                 `;
@@ -815,11 +816,11 @@
                 });
 
                 tr.querySelector('.print-btn').addEventListener('click', async () => {
-                    // Dos peticiones de impresión independientes: bono y etiqueta.
-                    // Cada una abre su propio diálogo de impresión, así el usuario
-                    // puede enviar cada una a una impresora distinta (p.ej. la
-                    // etiqueta a la Monarch Lp501i065 / 10.24.113.173).
                     printOrder(order);
+                    await updateOrderState(order, { impreso: true });
+                });
+
+                tr.querySelector('.label-btn').addEventListener('click', async () => {
                     printLabel(order);
                     await updateOrderState(order, { impreso: true });
                 });
@@ -944,12 +945,9 @@
         }
 
         // Etiqueta de 10 cm de ancho x 15 cm de largo, pensada para salir por la
-        // impresora de etiquetas Monarch "Lp501i065" (10.24.113.173). El navegador
-        // no puede enviar el trabajo directamente a esa IP; esta es una petición de
-        // impresión independiente para que, en el diálogo de impresión, se elija
-        // esa impresora (si está instalada como impresora del sistema/red).
+        // impresora de etiquetas Monarch "Lp501i065" (10.24.113.173). Solo debe
+        // mostrar la Tienda y el CC, en grande y centrado.
         function printLabel(order) {
-            const numLineas = (order.lineas && order.lineas.length) || 0;
             const printWindow = window.open('', '_blank', 'width=420,height=620');
             const doc = printWindow.document;
             doc.write('<html><head><title>Etiqueta pedido</title>');
@@ -957,38 +955,46 @@
                 <style>
                     @page { size: 10cm 15cm; margin: 0; }
                     * { box-sizing: border-box; }
-                    body {
+                    html, body {
                         width: 10cm;
                         height: 15cm;
                         margin: 0;
-                        padding: 0.5cm;
+                        padding: 0;
+                    }
+                    body {
                         font-family: Arial, Helvetica, sans-serif;
                         color: #000;
                         display: flex;
                         flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        text-align: center;
                     }
-                    .label-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
-                    .label-header .empresa { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; }
-                    .label-header .pedido-id { font-size: 30px; font-weight: 800; margin-top: 2px; }
-                    .label-field { margin-bottom: 8px; }
-                    .label-field .k { font-size: 10px; text-transform: uppercase; color: #444; letter-spacing: 0.04em; }
-                    .label-field .v { font-size: 16px; font-weight: 700; }
-                    .label-footer { margin-top: auto; text-align: center; font-size: 10px; color: #444; border-top: 1px solid #999; padding-top: 6px; }
+                    .campo { margin: 0.6cm 0; }
+                    .campo .k {
+                        font-size: 16px;
+                        text-transform: uppercase;
+                        letter-spacing: 0.06em;
+                        font-weight: 600;
+                    }
+                    .campo .v {
+                        font-size: 48px;
+                        font-weight: 800;
+                        line-height: 1.1;
+                        word-break: break-word;
+                    }
                 </style>
             `);
             doc.write('</head><body>');
             doc.write(`
-                <div class="label-header">
-                    <div class="empresa">Leroy Merlin &middot; LLS</div>
-                    <div class="pedido-id">PEDIDO #${escapeHtml(order.id)}</div>
+                <div class="campo">
+                    <div class="k">Tienda</div>
+                    <div class="v">${escapeHtml(order.tienda)}</div>
                 </div>
-                <div class="label-field"><div class="k">Tienda</div><div class="v">${escapeHtml(order.tienda)}</div></div>
-                <div class="label-field"><div class="k">Circuito</div><div class="v">${escapeHtml(order.circuito)}</div></div>
-                <div class="label-field"><div class="k">CC</div><div class="v">${escapeHtml(order.cc)}</div></div>
-                <div class="label-field"><div class="k">LDAP</div><div class="v">${escapeHtml(order.ldap)}</div></div>
-                <div class="label-field"><div class="k">Fecha</div><div class="v">${escapeHtml(formatDate(order.fecha))}</div></div>
-                <div class="label-field"><div class="k">Líneas</div><div class="v">${numLineas}</div></div>
-                <div class="label-footer">Impresora: Lp501i065 &middot; 10.24.113.173</div>
+                <div class="campo">
+                    <div class="k">CC</div>
+                    <div class="v">${escapeHtml(order.cc)}</div>
+                </div>
             `);
             doc.write('</body></html>');
             doc.close();
