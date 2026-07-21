@@ -922,72 +922,105 @@
             XLSX.writeFile(workbook, `pedido_${order.id}.xlsx`);
         }
 
-        function printOrder(order) {
-            const printWindow = window.open('', '_blank');
+        // Abre una ventana de impresión de forma robusta:
+        // - Si el navegador bloquea la ventana emergente, avisa claramente en vez
+        //   de fallar en silencio (causa típica de que "no salte" el pop-up).
+        // - No cierra la ventana justo después de llamar a print(): print() no es
+        //   instantáneo, y cerrar demasiado pronto es la causa más habitual de que
+        //   una impresora (especialmente una física como la Monarch) saque la hoja
+        //   en blanco. Se cierra sola cuando el diálogo de impresión termina
+        //   (evento afterprint) o, como red de seguridad, a los 15 segundos.
+        function abrirVentanaImpresion(title, styleCss, bodyHtml, features) {
+            const printWindow = window.open('', '_blank', features || '');
+            if (!printWindow) {
+                alert('El navegador ha bloqueado la ventana de impresión (pop-up). Permite las ventanas emergentes para esta página (icono en la barra de direcciones o Configuración > Privacidad y seguridad > Pop-ups y redirecciones) e inténtalo de nuevo.');
+                return null;
+            }
             const doc = printWindow.document;
-            doc.write('<html><head><title>Imprimir Pedido</title>');
-            doc.write('<style>table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f2f2f2;}</style>');
-            doc.write('</head><body>');
-            doc.write(`<h2>Pedido #${escapeHtml(order.id)}</h2>`);
-            doc.write('<h3>Cabecera</h3><table><tbody>');
-            doc.write(`<tr><td><strong>LDAP:</strong></td><td>${escapeHtml(order.ldap)}</td></tr>`);
-            doc.write(`<tr><td><strong>Tienda:</strong></td><td>${escapeHtml(order.tienda)}</td></tr>`);
-            doc.write(`<tr><td><strong>CC:</strong></td><td>${escapeHtml(order.cc)}</td></tr>`);
-            doc.write(`<tr><td><strong>Circuito:</strong></td><td>${escapeHtml(order.circuito)}</td></tr>`);
-            doc.write(`<tr><td><strong>Fecha:</strong></td><td>${escapeHtml(formatDate(order.fecha))}</td></tr>`);
-            doc.write(`<tr><td><strong>Estado:</strong></td><td>${escapeHtml(getOrderEstado(order).label)}</td></tr>`);
-            doc.write('</tbody></table><h3>Líneas</h3>');
-            doc.write(generateDetailsTable(order));
-            doc.write('</body></html>');
+            doc.open();
+            doc.write(`<html><head><title>${title}</title><style>${styleCss}</style></head><body>${bodyHtml}</body></html>`);
             doc.close();
-            printWindow.focus();
-            printWindow.print();
-            printWindow.close();
+
+            const lanzarImpresion = () => {
+                printWindow.focus();
+                printWindow.print();
+            };
+
+            // Da tiempo a que la ventana termine de pintar el contenido antes de imprimir.
+            if (printWindow.document.readyState === 'complete') {
+                setTimeout(lanzarImpresion, 200);
+            } else {
+                printWindow.addEventListener('load', () => setTimeout(lanzarImpresion, 200));
+            }
+
+            let cerrada = false;
+            const cerrarVentana = () => {
+                if (cerrada) return;
+                cerrada = true;
+                if (!printWindow.closed) printWindow.close();
+            };
+            printWindow.addEventListener('afterprint', cerrarVentana);
+            setTimeout(cerrarVentana, 15000);
+
+            return printWindow;
+        }
+
+        function printOrder(order) {
+            const styleCss = 'table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f2f2f2;}';
+            const bodyHtml = `
+                <h2>Pedido #${escapeHtml(order.id)}</h2>
+                <h3>Cabecera</h3>
+                <table><tbody>
+                    <tr><td><strong>LDAP:</strong></td><td>${escapeHtml(order.ldap)}</td></tr>
+                    <tr><td><strong>Tienda:</strong></td><td>${escapeHtml(order.tienda)}</td></tr>
+                    <tr><td><strong>CC:</strong></td><td>${escapeHtml(order.cc)}</td></tr>
+                    <tr><td><strong>Circuito:</strong></td><td>${escapeHtml(order.circuito)}</td></tr>
+                    <tr><td><strong>Fecha:</strong></td><td>${escapeHtml(formatDate(order.fecha))}</td></tr>
+                    <tr><td><strong>Estado:</strong></td><td>${escapeHtml(getOrderEstado(order).label)}</td></tr>
+                </tbody></table>
+                <h3>Líneas</h3>
+                ${generateDetailsTable(order)}
+            `;
+            abrirVentanaImpresion('Imprimir Pedido', styleCss, bodyHtml);
         }
 
         // Etiqueta de 10 cm de ancho x 15 cm de largo, pensada para salir por la
         // impresora de etiquetas Monarch "Lp501i065" (10.24.113.173). Solo debe
         // mostrar la Tienda y el CC, en grande y centrado.
         function printLabel(order) {
-            const printWindow = window.open('', '_blank', 'width=420,height=620');
-            const doc = printWindow.document;
-            doc.write('<html><head><title>Etiqueta pedido</title>');
-            doc.write(`
-                <style>
-                    @page { size: 10cm 15cm; margin: 0; }
-                    * { box-sizing: border-box; }
-                    html, body {
-                        width: 10cm;
-                        height: 15cm;
-                        margin: 0;
-                        padding: 0;
-                    }
-                    body {
-                        font-family: Arial, Helvetica, sans-serif;
-                        color: #000;
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        justify-content: center;
-                        text-align: center;
-                    }
-                    .campo { margin: 0.6cm 0; }
-                    .campo .k {
-                        font-size: 16px;
-                        text-transform: uppercase;
-                        letter-spacing: 0.06em;
-                        font-weight: 600;
-                    }
-                    .campo .v {
-                        font-size: 48px;
-                        font-weight: 800;
-                        line-height: 1.1;
-                        word-break: break-word;
-                    }
-                </style>
-            `);
-            doc.write('</head><body>');
-            doc.write(`
+            const styleCss = `
+                @page { size: 10cm 15cm; margin: 0; }
+                * { box-sizing: border-box; }
+                html, body {
+                    width: 10cm;
+                    height: 15cm;
+                    margin: 0;
+                    padding: 0;
+                }
+                body {
+                    font-family: Arial, Helvetica, sans-serif;
+                    color: #000;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    text-align: center;
+                }
+                .campo { margin: 0.6cm 0; }
+                .campo .k {
+                    font-size: 16px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.06em;
+                    font-weight: 600;
+                }
+                .campo .v {
+                    font-size: 48px;
+                    font-weight: 800;
+                    line-height: 1.1;
+                    word-break: break-word;
+                }
+            `;
+            const bodyHtml = `
                 <div class="campo">
                     <div class="k">Tienda</div>
                     <div class="v">${escapeHtml(order.tienda)}</div>
@@ -996,12 +1029,8 @@
                     <div class="k">CC</div>
                     <div class="v">${escapeHtml(order.cc)}</div>
                 </div>
-            `);
-            doc.write('</body></html>');
-            doc.close();
-            printWindow.focus();
-            printWindow.print();
-            printWindow.close();
+            `;
+            abrirVentanaImpresion('Etiqueta pedido', styleCss, bodyHtml, 'width=420,height=620');
         }
 
         window.addEventListener('DOMContentLoaded', () => {
