@@ -125,10 +125,36 @@
             font-size: 12px;
             color: var(--muted);
         }
+
+        .session-bar {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+        .session-bar .quien { font-weight: 700; color: var(--text); }
+        .session-bar button {
+            border: none;
+            background: transparent;
+            color: var(--blue);
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 0;
+        }
+        .card.usuarios .icon { background: #eef0f3; color: var(--muted); }
     </style>
 </head>
 <body>
 <div class="page">
+
+    <div class="session-bar">
+        <span>Conectado como <span class="quien" id="sesion-nombre"></span></span>
+        <button type="button" id="logout-btn">Salir</button>
+    </div>
 
     <div class="brand">
         <span class="tag">Logística LLS</span>
@@ -150,9 +176,47 @@
             <p>Consulta, filtra y cambia el estado (Asignado / En preparación / Preparado) de todos los pedidos registrados.</p>
             <span class="enter">Entrar <span class="arrow">→</span></span>
         </a>
+
+        <a class="card usuarios" href="usuarios.html" id="card-usuarios" style="display:none;">
+            <div class="icon">👤</div>
+            <h2>Gestión de usuarios</h2>
+            <p>Alta, edición y desactivación de usuarios LDAP y su tienda asignada. Solo para administradores.</p>
+            <span class="enter">Entrar <span class="arrow">→</span></span>
+        </a>
     </div>
 
     <footer>Conectado a Supabase &middot; PedidoMutuOfline &amp; StockDispo</footer>
 </div>
+
+    <script>
+        const SESSION_KEY = 'llsSesionUsuario';
+
+        function getSesion() {
+            try {
+                const raw = localStorage.getItem(SESSION_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function cerrarSesion() {
+            localStorage.removeItem(SESSION_KEY);
+            window.location.href = 'login.html';
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const sesion = getSesion();
+            if (!sesion) {
+                window.location.href = 'login.html';
+                return;
+            }
+            document.getElementById('sesion-nombre').textContent = `${sesion.nombre || sesion.ldap} (${sesion.rol === 'admin' ? 'Administrador' : 'Tienda ' + sesion.tienda})`;
+            document.getElementById('logout-btn').addEventListener('click', cerrarSesion);
+            if (sesion.rol === 'admin') {
+                document.getElementById('card-usuarios').style.display = '';
+            }
+        });
+    </script>
 </body>
 </html>

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de usuarios - SISTEMA GESTIÓN LLS Leroy Merlin</title>
+    <style>
+        :root {
+            --bg: #f5f6f8;
+            --surface: #ffffff;
+            --border: #e5e7eb;
+            --text: #1f2430;
+            --muted: #6b7280;
+            --accent-green: #4caf50;
+            --accent-green-dark: #3d9140;
+            --purple-bg: #ede3fb;
+            --purple-text: #7c3aed;
+            --green-bg: #dcf5e3;
+            --green-text: #1e8a4c;
+            --blue: #2563eb;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", Roboto, Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: var(--bg);
+            color: var(--text);
+        }
+        .page { max-width: 1000px; margin: 0 auto; }
+        h1 { font-size: 22px; margin: 0 0 4px 0; }
+        h2 { font-size: 16px; margin: 0 0 4px 0; }
+        .subtitle { color: var(--muted); font-size: 13px; margin: 0 0 18px 0; }
+
+        .topbar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .conn-status { display: flex; align-items: center; gap: 10px; }
+        .status { font-size: 13px; font-weight: 600; }
+        .status.ok { color: var(--green-text); }
+        .status.error { color: #b3261e; }
+        .muted { color: var(--muted); font-size: 13px; }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+        }
+        .field-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 14px;
+            margin-top: 14px;
+        }
+        .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+        input[type="text"], input[type="password"], select {
+            width: 100%;
+            padding: 9px 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            background: var(--surface);
+            color: var(--text);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            padding: 9px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn:hover { background: #f2f3f5; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-green); border-color: var(--accent-green); color: #fff; }
+        .btn-primary:hover { background: var(--accent-green-dark); }
+        .btn-outline { background: var(--surface); border-color: var(--border); }
+        .btn-ghost { background: transparent; border: none; color: var(--blue); padding: 6px 8px; }
+        .btn-icon {
+            border: 1px solid var(--border);
+            background: var(--surface);
+            border-radius: 6px;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn-icon:hover { background: #f2f3f5; }
+        .btn-icon.danger:hover { background: #fdecec; border-color: #f3b9b9; color: #b3261e; }
+
+        .table-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow-x: auto;
+        }
+        table { width: 100%; border-collapse: collapse; min-width: 700px; }
+        thead th {
+            text-align: left;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            background: #fafbfc;
+            white-space: nowrap;
+        }
+        tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
+        tbody tr:hover { background: #fafbfc; }
+        .empty-row td { text-align: center; color: var(--muted); padding: 26px; }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .badge-admin { background: var(--purple-bg); color: var(--purple-text); }
+        .badge-tienda { background: #eef0f3; color: var(--muted); }
+        .badge-activo { background: var(--green-bg); color: var(--green-text); }
+        .badge-inactivo { background: #fdecec; color: #b3261e; }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <div class="topbar">
+        <div>
+            <a href="MenuMutuofine.html" class="btn-ghost" style="padding:0;font-size:12px;font-weight:700;display:inline-block;margin-bottom:6px;">← Volver al menú</a>
+            <h1>Gestión de usuarios</h1>
+            <p class="subtitle">Alta y control de acceso de usuarios LDAP</p>
+        </div>
+        <div class="conn-status">
+            <span id="sesion-info" class="muted"></span>
+            <button type="button" id="refresh-btn" class="btn btn-ghost">↻ Actualizar</button>
+            <button type="button" id="logout-btn" class="btn btn-ghost">Salir</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2 id="form-title">Nuevo usuario</h2>
+        <p class="muted">Para usuarios de rol "Tienda", asigna la tienda a la que tendrán acceso. Los administradores tienen acceso a todas las tiendas.</p>
+        <div class="field-grid">
+            <div class="field">
+                <label for="u-ldap">LDAP</label>
+                <input type="text" id="u-ldap" placeholder="usuario.ldap" />
+            </div>
+            <div class="field">
+                <label for="u-nombre">Nombre</label>
+                <input type="text" id="u-nombre" placeholder="Nombre y apellidos" />
+            </div>
+            <div class="field">
+                <label for="u-pin">PIN</label>
+                <input type="text" id="u-pin" placeholder="PIN de acceso" />
+            </div>
+            <div class="field">
+                <label for="u-rol">Rol</label>
+                <select id="u-rol">
+                    <option value="tienda">Tienda</option>
+                    <option value="admin">Administrador</option>
+                </select>
+            </div>
+            <div class="field" id="u-tienda-field">
+                <label for="u-tienda">Tienda</label>
+                <select id="u-tienda">
+                    <option value="">Seleccione una tienda</option>
+                    <option value="T038">T038</option>
+                    <option value="T006">T006</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="u-activo">Estado</label>
+                <select id="u-activo">
+                    <option value="true">Activo</option>
+                    <option value="false">Inactivo</option>
+                </select>
+            </div>
+        </div>
+        <div style="margin-top:14px; display:flex; gap:10px;">
+            <button type="button" id="guardar-btn" class="btn btn-primary">Guardar usuario</button>
+            <button type="button" id="cancelar-edicion-btn" class="btn btn-outline" style="display:none;">Cancelar edición</button>
+        </div>
+        <p id="form-status" class="status" style="margin-top:10px;"></p>
+    </div>
+
+    <div class="table-wrap">
+        <table id="usuarios-table">
+            <thead>
+                <tr>
+                    <th>LDAP</th>
+                    <th>Nombre</th>
+                    <th>Rol</th>
+                    <th>Tienda</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+    <script>
+        const SUPABASE_CONFIG = {
+            restUrl: 'https://xuksvnotvestdgchgppg.supabase.co/rest/v1',
+            anonKeyParts: ['sb_publishable_', '6cYXev16SOZ4TyT9UYuDHQ_JEtuV5G5'],
+            usuariosTable: 'UsuariosLDAP'
+        };
+        const SESSION_KEY = 'llsSesionUsuario';
+
+        let usuariosCache = [];
+        let editandoId = null;
+
+        function getConfiguredAnonKey() {
+            return SUPABASE_CONFIG.anonKeyParts.join('');
+        }
+
+        function supabaseHeaders(extraHeaders = {}) {
+            const key = getConfiguredAnonKey();
+            return { apikey: key, Authorization: `Bearer ${key}`, ...extraHeaders };
+        }
+
+        function tableUrl(tableName, query = '') {
+            const base = `${SUPABASE_CONFIG.restUrl.replace(/\/$/, '')}/${encodeURIComponent(tableName)}`;
+            return query ? `${base}?${query}` : base;
+        }
+
+        async function supabaseRequest(tableName, { method = 'GET', query = '', body = null, headers = {} } = {}) {
+            const requestHeaders = supabaseHeaders(headers);
+            const options = { method, headers: requestHeaders };
+            if (body !== null) {
+                options.body = JSON.stringify(body);
+                if (!options.headers['Content-Type']) options.headers['Content-Type'] = 'application/json';
+            }
+            const response = await fetch(tableUrl(tableName, query), options);
+            const responseText = await response.text();
+            if (!response.ok) throw new Error(`${method} ${tableName} falló (${response.status}): ${responseText || response.statusText}`);
+            if (!responseText) return null;
+            try { return JSON.parse(responseText); } catch (error) { return responseText; }
+        }
+
+        function toText(value) {
+            return value === undefined || value === null ? '' : String(value).trim();
+        }
+
+        function escapeHtml(value) {
+            return toText(value).replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+            }[char]));
+        }
+
+        // ---------- sesión ----------
+        function getSesion() {
+            try {
+                const raw = localStorage.getItem(SESSION_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function cerrarSesion() {
+            localStorage.removeItem(SESSION_KEY);
+            window.location.href = 'login.html';
+        }
+
+        function exigirAdmin() {
+            const sesion = getSesion();
+            if (!sesion) {
+                window.location.href = 'login.html';
+                return null;
+            }
+            if (sesion.rol !== 'admin') {
+                alert('Esta sección es solo para administradores.');
+                window.location.href = 'MenuMutuofine.html';
+                return null;
+            }
+            return sesion;
+        }
+
+        function setStatus(message, ok = true) {
+            const el = document.getElementById('form-status');
+            el.textContent = message;
+            el.className = `status ${ok ? 'ok' : 'error'}`;
+        }
+
+        // ---------- CRUD usuarios ----------
+        async function cargarUsuarios() {
+            try {
+                const rows = await supabaseRequest(SUPABASE_CONFIG.usuariosTable, { query: 'select=*&order=LDAP.asc' });
+                usuariosCache = Array.isArray(rows) ? rows : [];
+                renderUsuarios();
+            } catch (error) {
+                console.error(error);
+                setStatus(`Error al cargar usuarios: ${error.message}`, false);
+            }
+        }
+
+        function renderUsuarios() {
+            const tbody = document.querySelector('#usuarios-table tbody');
+            tbody.innerHTML = '';
+            if (!usuariosCache.length) {
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No hay usuarios todavía.</td></tr>';
+                return;
+            }
+            usuariosCache.forEach(u => {
+                const rol = toText(u.Rol).toLowerCase() === 'admin' ? 'admin' : 'tienda';
+                const activo = u.Activo === undefined || u.Activo === null ? true : Boolean(u.Activo);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${escapeHtml(u.LDAP)}</td>
+                    <td>${escapeHtml(u.Nombre)}</td>
+                    <td><span class="badge ${rol === 'admin' ? 'badge-admin' : 'badge-tienda'}">${rol === 'admin' ? 'Administrador' : 'Tienda'}</span></td>
+                    <td>${rol === 'admin' ? '<span class="muted">Todas</span>' : escapeHtml(u.Tienda || '-')}</td>
+                    <td><span class="badge ${activo ? 'badge-activo' : 'badge-inactivo'}">${activo ? 'Activo' : 'Inactivo'}</span></td>
+                    <td>
+                        <button type="button" class="btn-icon editar-btn" title="Editar">✎</button>
+                        <button type="button" class="btn-icon danger eliminar-btn" title="Eliminar">×</button>
+                    </td>
+                `;
+                tr.querySelector('.editar-btn').addEventListener('click', () => cargarEnFormulario(u));
+                tr.querySelector('.eliminar-btn').addEventListener('click', () => eliminarUsuario(u));
+                tbody.appendChild(tr);
+            });
+        }
+
+        function cargarEnFormulario(u) {
+            editandoId = u.id;
+            document.getElementById('form-title').textContent = `Editando: ${toText(u.LDAP)}`;
+            document.getElementById('u-ldap').value = toText(u.LDAP);
+            document.getElementById('u-nombre').value = toText(u.Nombre);
+            document.getElementById('u-pin').value = toText(u.PIN);
+            document.getElementById('u-rol').value = toText(u.Rol).toLowerCase() === 'admin' ? 'admin' : 'tienda';
+            document.getElementById('u-tienda').value = toText(u.Tienda);
+            const activo = u.Activo === undefined || u.Activo === null ? true : Boolean(u.Activo);
+            document.getElementById('u-activo').value = activo ? 'true' : 'false';
+            document.getElementById('cancelar-edicion-btn').style.display = '';
+            actualizarVisibilidadTienda();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function limpiarFormulario() {
+            editandoId = null;
+            document.getElementById('form-title').textContent = 'Nuevo usuario';
+            document.getElementById('u-ldap').value = '';
+            document.getElementById('u-nombre').value = '';
+            document.getElementById('u-pin').value = '';
+            document.getElementById('u-rol').value = 'tienda';
+            document.getElementById('u-tienda').value = '';
+            document.getElementById('u-activo').value = 'true';
+            document.getElementById('cancelar-edicion-btn').style.display = 'none';
+            actualizarVisibilidadTienda();
+        }
+
+        function actualizarVisibilidadTienda() {
+            const esAdmin = document.getElementById('u-rol').value === 'admin';
+            document.getElementById('u-tienda-field').style.display = esAdmin ? 'none' : '';
+        }
+
+        async function guardarUsuario() {
+            const ldap = document.getElementById('u-ldap').value.trim();
+            const nombre = document.getElementById('u-nombre').value.trim();
+            const pin = document.getElementById('u-pin').value.trim();
+            const rol = document.getElementById('u-rol').value;
+            const tienda = rol === 'admin' ? '' : document.getElementById('u-tienda').value;
+            const activo = document.getElementById('u-activo').value === 'true';
+
+            if (!ldap || !pin) {
+                setStatus('LDAP y PIN son obligatorios.', false);
+                return;
+            }
+            if (rol === 'tienda' && !tienda) {
+                setStatus('Selecciona la tienda para un usuario de rol Tienda.', false);
+                return;
+            }
+
+            const row = { LDAP: ldap, Nombre: nombre, PIN: pin, Rol: rol, Tienda: tienda, Activo: activo };
+            const btn = document.getElementById('guardar-btn');
+            btn.disabled = true;
+            btn.textContent = 'Guardando...';
+            try {
+                if (editandoId !== null && editandoId !== undefined) {
+                    await supabaseRequest(SUPABASE_CONFIG.usuariosTable, {
+                        method: 'PATCH',
+                        query: `id=eq.${encodeURIComponent(editandoId)}`,
+                        headers: { Prefer: 'return=minimal' },
+                        body: row
+                    });
+                    setStatus('Usuario actualizado.', true);
+                } else {
+                    await supabaseRequest(SUPABASE_CONFIG.usuariosTable, {
+                        method: 'POST',
+                        headers: { Prefer: 'return=minimal' },
+                        body: row
+                    });
+                    setStatus('Usuario creado.', true);
+                }
+                limpiarFormulario();
+                await cargarUsuarios();
+            } catch (error) {
+                console.error(error);
+                setStatus(`Error al guardar: ${error.message}`, false);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Guardar usuario';
+            }
+        }
+
+        async function eliminarUsuario(u) {
+            if (!confirm(`¿Eliminar el usuario ${toText(u.LDAP)}? Esta acción no se puede deshacer.`)) return;
+            try {
+                await supabaseRequest(SUPABASE_CONFIG.usuariosTable, {
+                    method: 'DELETE',
+                    query: `id=eq.${encodeURIComponent(u.id)}`,
+                    headers: { Prefer: 'return=minimal' }
+                });
+                await cargarUsuarios();
+            } catch (error) {
+                console.error(error);
+                alert(`Error al eliminar: ${error.message}`);
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const sesion = exigirAdmin();
+            if (!sesion) return;
+            document.getElementById('sesion-info').textContent = `${sesion.nombre || sesion.ldap} · Administrador`;
+            document.getElementById('logout-btn').addEventListener('click', cerrarSesion);
+            document.getElementById('refresh-btn').addEventListener('click', cargarUsuarios);
+            document.getElementById('guardar-btn').addEventListener('click', guardarUsuario);
+            document.getElementById('cancelar-edicion-btn').addEventListener('click', limpiarFormulario);
+            document.getElementById('u-rol').addEventListener('change', actualizarVisibilidadTienda);
+            actualizarVisibilidadTienda();
+            cargarUsuarios();
+        });
+    </script>
+</body>
+</html>

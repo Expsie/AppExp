@@ -168,8 +168,10 @@
             <p class="subtitle">Crea un pedido validado contra el stock disponible en Supabase</p>
         </div>
         <div class="conn-status">
+            <span id="sesion-info" class="muted"></span>
             <span id="supabase-status" class="status"></span>
             <button type="button" id="refresh-data-btn" class="btn btn-ghost">↻ Actualizar ahora</button>
+            <button type="button" id="logout-btn" class="btn btn-ghost">Salir</button>
         </div>
     </div>
 
@@ -244,7 +246,9 @@
         };
 
         const REFRESH_INTERVAL_MS = 180000; // 3 minutos
+        const SESSION_KEY = 'llsSesionUsuario';
 
+        let sesionActual = null;
         let stockCache = [];
         let pedidosCache = [];
         let activeStockColumnMap = null;
@@ -868,13 +872,65 @@
             window.open('ver_pedidos.html', '_blank');
         }
 
+        // ---------- sesión / control de acceso ----------
+        function getSesion() {
+            try {
+                const raw = localStorage.getItem(SESSION_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function cerrarSesion() {
+            localStorage.removeItem(SESSION_KEY);
+            window.location.href = 'login.html';
+        }
+
+        function exigirSesion() {
+            const sesion = getSesion();
+            if (!sesion) {
+                window.location.href = 'login.html';
+                return null;
+            }
+            return sesion;
+        }
+
+        // Autocompleta LDAP y Tienda con los datos de la sesión y bloquea su
+        // edición salvo que el usuario sea Administrador, para que un usuario de
+        // tienda no pueda generar pedidos para otra tienda distinta a la suya.
+        function aplicarControlDeAcceso(sesion) {
+            document.getElementById('sesion-info').textContent =
+                `${sesion.nombre || sesion.ldap} · ${sesion.rol === 'admin' ? 'Administrador' : 'Tienda ' + sesion.tienda}`;
+
+            const ldapInput = document.getElementById('ldap');
+            const tiendaSelect = document.getElementById('tienda');
+
+            if (sesion.rol === 'admin') return; // acceso completo, campos editables
+
+            ldapInput.value = sesion.ldap;
+            ldapInput.readOnly = true;
+            ldapInput.style.background = '#f1f2f4';
+
+            if (sesion.tienda) {
+                tiendaSelect.value = sesion.tienda;
+            }
+            tiendaSelect.disabled = true;
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
+            const sesion = exigirSesion();
+            if (!sesion) return;
+            sesionActual = sesion;
+            aplicarControlDeAcceso(sesion);
+
+            document.getElementById('logout-btn').addEventListener('click', cerrarSesion);
             document.getElementById('refresh-data-btn').addEventListener('click', cargarDatosSupabase);
             document.getElementById('add-line-btn').addEventListener('click', addLine);
             document.getElementById('finalize-btn').addEventListener('click', finalizarPedido);
             document.getElementById('view-orders-btn').addEventListener('click', viewOrders);
             document.getElementById('tienda').addEventListener('change', recalcularLineas);
-            cargarDatosSupabase();
+            cargarDatosSupabase().then(() => recalcularLineas());
             setInterval(cargarDatosSupabase, REFRESH_INTERVAL_MS);
         });
     </script>

@@ -214,8 +214,10 @@
             <p class="subtitle">Pedidos registrados en Supabase &middot; tabla <code>PedidoMutuOfline</code></p>
         </div>
         <div class="conn-status">
+            <span id="sesion-info" class="muted"></span>
             <span id="supabase-status" class="status"></span>
             <button type="button" id="refresh-orders-btn" class="btn btn-ghost">↻ Actualizar ahora</button>
+            <button type="button" id="logout-btn" class="btn btn-ghost">Salir</button>
         </div>
     </div>
 
@@ -326,7 +328,9 @@
         };
 
         const REFRESH_INTERVAL_MS = 180000; // 3 minutos
+        const SESSION_KEY = 'llsSesionUsuario';
 
+        let sesionActual = null;
         let pedidosCache = [];
         let currentFilteredOrders = [];
         let activePedidoColumnMap = null;
@@ -438,6 +442,19 @@
 
         function normalizeKey(key) {
             return key.toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '');
+        }
+
+        // Compara códigos de tienda de forma tolerante a variaciones de formato
+        // (espacios, mayúsculas, ceros a la izquierda: "T006" == "T6" == "t006").
+        function normalizeTiendaCode(value) {
+            const text = toText(value).toUpperCase().replace(/\s+/g, '');
+            const match = text.match(/^([A-Z]*)0*(\d+)$/);
+            if (match) return `${match[1]}${match[2]}`;
+            return text;
+        }
+
+        function sameTienda(a, b) {
+            return normalizeTiendaCode(a) === normalizeTiendaCode(b);
         }
 
         function escapeHtml(value) {
@@ -767,10 +784,11 @@
             }
             orders.forEach(order => {
                 const estado = getOrderEstado(order);
+                const esPropia = !sesionActual || sesionActual.rol === 'admin' || sameTienda(order.tienda, sesionActual.tienda);
                 const tr = document.createElement('tr');
                 tr.dataset.orderId = order.id;
                 tr.innerHTML = `
-                    <td><input type="checkbox" class="row-checkbox" /></td>
+                    <td><input type="checkbox" class="row-checkbox" ${esPropia ? '' : 'disabled title="Solo lectura: pedido de otra tienda"'} /></td>
                     <td>${escapeHtml(order.id)}</td>
                     <td>${escapeHtml(order.ldap)}</td>
                     <td>${escapeHtml(order.tienda)}</td>
@@ -781,9 +799,9 @@
                     <td style="text-align:center;">${order.impreso ? '<span class="check-yes" title="Impreso">✔</span>' : '<span class="check-no" title="No impreso">—</span>'}</td>
                     <td>
                         <button type="button" class="btn-icon details-btn" title="Ver líneas del pedido">▾</button>
-                        <button type="button" class="btn-icon print-btn" title="Imprimir bono de preparación">🖨</button>
-                        <button type="button" class="btn-icon label-btn" title="Imprimir etiqueta">🏷</button>
-                        <button type="button" class="btn-icon export-btn" title="Exportar pedido a Excel">⬇</button>
+                        <button type="button" class="btn-icon print-btn" title="Imprimir bono de preparación" ${esPropia ? '' : 'disabled title="Solo lectura: pedido de otra tienda"'}>🖨</button>
+                        <button type="button" class="btn-icon label-btn" title="Imprimir etiqueta" ${esPropia ? '' : 'disabled title="Solo lectura: pedido de otra tienda"'}>🏷</button>
+                        <button type="button" class="btn-icon export-btn" title="Exportar pedido a Excel" ${esPropia ? '' : 'disabled title="Solo lectura: pedido de otra tienda"'}>⬇</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -851,7 +869,10 @@
             try {
                 for (const orderId of orderIds) {
                     const order = pedidosCache.find(o => String(o.id) === orderId);
-                    if (order) await updateOrderState(order, changes);
+                    if (!order) continue;
+                    const esPropia = !sesionActual || sesionActual.rol === 'admin' || sameTienda(order.tienda, sesionActual.tienda);
+                    if (!esPropia) continue; // solo lectura para pedidos de otra tienda
+                    await updateOrderState(order, changes);
                 }
                 applyFilters();
             } finally {
@@ -1033,7 +1054,38 @@
             abrirVentanaImpresion('Etiqueta pedido', styleCss, bodyHtml, 'width=420,height=620');
         }
 
+        // ---------- sesión / control de acceso ----------
+        function getSesion() {
+            try {
+                const raw = localStorage.getItem(SESSION_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function cerrarSesion() {
+            localStorage.removeItem(SESSION_KEY);
+            window.location.href = 'login.html';
+        }
+
+        function exigirSesion() {
+            const sesion = getSesion();
+            if (!sesion) {
+                window.location.href = 'login.html';
+                return null;
+            }
+            return sesion;
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
+            const sesion = exigirSesion();
+            if (!sesion) return;
+            sesionActual = sesion;
+            document.getElementById('sesion-info').textContent =
+                `${sesion.nombre || sesion.ldap} · ${sesion.rol === 'admin' ? 'Administrador' : 'Tienda ' + sesion.tienda}`;
+            document.getElementById('logout-btn').addEventListener('click', cerrarSesion);
+
             document.getElementById('refresh-orders-btn').addEventListener('click', () => {
                 cargarPedidosSupabase();
                 cargarUltimaImportacion();
@@ -1046,7 +1098,7 @@
             document.getElementById('bulk-estado-select').addEventListener('change', updateBulkApplyState);
             document.getElementById('bulk-apply-btn').addEventListener('click', applyBulkEstado);
             document.getElementById('select-all-checkbox').addEventListener('change', (e) => {
-                document.querySelectorAll('.row-checkbox').forEach(cb => { cb.checked = e.target.checked; });
+                document.querySelectorAll('.row-checkbox:not(:disabled)').forEach(cb => { cb.checked = e.target.checked; });
                 updateBulkApplyState();
             });
 

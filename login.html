@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso - SISTEMA GESTIÓN LLS Leroy Merlin</title>
+    <style>
+        :root {
+            --bg: #f5f6f8;
+            --surface: #ffffff;
+            --border: #e5e7eb;
+            --text: #1f2430;
+            --muted: #6b7280;
+            --accent-green: #4caf50;
+            --accent-green-dark: #3d9140;
+            --green-bg: #dcf5e3;
+            --green-text: #1e8a4c;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", Roboto, Arial, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .card {
+            width: 100%;
+            max-width: 380px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 32px 28px;
+        }
+        .tag {
+            display: inline-block;
+            background: var(--green-bg);
+            color: var(--green-text);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 5px 14px;
+            border-radius: 999px;
+            margin-bottom: 14px;
+        }
+        h1 { font-size: 19px; margin: 0 0 4px 0; }
+        .subtitle { color: var(--muted); font-size: 13px; margin: 0 0 22px 0; }
+        .field { margin-bottom: 14px; }
+        .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            background: var(--surface);
+            color: var(--text);
+        }
+        input:focus { outline: 2px solid #c7d2fe; }
+        .btn {
+            width: 100%;
+            border: 1px solid var(--accent-green);
+            background: var(--accent-green);
+            color: #fff;
+            padding: 11px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 6px;
+        }
+        .btn:hover { background: var(--accent-green-dark); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .status { font-size: 13px; font-weight: 600; margin-top: 14px; min-height: 18px; }
+        .status.error { color: #b3261e; }
+        .status.ok { color: var(--green-text); }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <span class="tag">Logística LLS</span>
+        <h1>SISTEMA GESTIÓN LLS Leroy Merlin</h1>
+        <p class="subtitle">Introduce tu LDAP y PIN para acceder</p>
+
+        <form id="login-form">
+            <div class="field">
+                <label for="login-ldap">LDAP</label>
+                <input type="text" id="login-ldap" autocomplete="username" required />
+            </div>
+            <div class="field">
+                <label for="login-pin">PIN</label>
+                <input type="password" id="login-pin" autocomplete="current-password" required />
+            </div>
+            <button type="submit" id="login-btn" class="btn">Entrar</button>
+            <p id="login-status" class="status"></p>
+        </form>
+    </div>
+
+    <script>
+        const SUPABASE_CONFIG = {
+            restUrl: 'https://xuksvnotvestdgchgppg.supabase.co/rest/v1',
+            anonKeyParts: ['sb_publishable_', '6cYXev16SOZ4TyT9UYuDHQ_JEtuV5G5'],
+            usuariosTable: 'UsuariosLDAP'
+        };
+        const SESSION_KEY = 'llsSesionUsuario';
+
+        function getConfiguredAnonKey() {
+            return SUPABASE_CONFIG.anonKeyParts.join('');
+        }
+
+        function supabaseHeaders(extraHeaders = {}) {
+            const key = getConfiguredAnonKey();
+            return { apikey: key, Authorization: `Bearer ${key}`, ...extraHeaders };
+        }
+
+        function tableUrl(tableName, query = '') {
+            const base = `${SUPABASE_CONFIG.restUrl.replace(/\/$/, '')}/${encodeURIComponent(tableName)}`;
+            return query ? `${base}?${query}` : base;
+        }
+
+        async function supabaseRequest(tableName, { method = 'GET', query = '', body = null, headers = {} } = {}) {
+            const requestHeaders = supabaseHeaders(headers);
+            const options = { method, headers: requestHeaders };
+            if (body !== null) {
+                options.body = JSON.stringify(body);
+                if (!options.headers['Content-Type']) options.headers['Content-Type'] = 'application/json';
+            }
+            const response = await fetch(tableUrl(tableName, query), options);
+            const responseText = await response.text();
+            if (!response.ok) throw new Error(`${method} ${tableName} falló (${response.status}): ${responseText || response.statusText}`);
+            if (!responseText) return null;
+            try { return JSON.parse(responseText); } catch (error) { return responseText; }
+        }
+
+        function toText(value) {
+            return value === undefined || value === null ? '' : String(value).trim();
+        }
+
+        function guardarSesion(sesion) {
+            localStorage.setItem(SESSION_KEY, JSON.stringify(sesion));
+        }
+
+        function setStatus(message, ok) {
+            const el = document.getElementById('login-status');
+            el.textContent = message;
+            el.className = `status ${ok ? 'ok' : 'error'}`;
+        }
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const ldap = document.getElementById('login-ldap').value.trim();
+            const pin = document.getElementById('login-pin').value.trim();
+            if (!ldap || !pin) return;
+            const btn = document.getElementById('login-btn');
+            btn.disabled = true;
+            btn.textContent = 'Comprobando...';
+            setStatus('', true);
+            try {
+                const query = `LDAP=ilike.${encodeURIComponent(ldap)}&select=*`;
+                const rows = await supabaseRequest(SUPABASE_CONFIG.usuariosTable, { query });
+                const usuario = Array.isArray(rows) && rows.length ? rows[0] : null;
+                if (!usuario) {
+                    setStatus('LDAP no encontrado.', false);
+                    return;
+                }
+                const activo = usuario.Activo === undefined || usuario.Activo === null ? true : Boolean(usuario.Activo);
+                if (!activo) {
+                    setStatus('Este usuario está desactivado. Contacta con un administrador.', false);
+                    return;
+                }
+                if (toText(usuario.PIN) !== pin) {
+                    setStatus('PIN incorrecto.', false);
+                    return;
+                }
+                const rol = toText(usuario.Rol).toLowerCase() === 'admin' ? 'admin' : 'tienda';
+                const sesion = {
+                    ldap: toText(usuario.LDAP),
+                    nombre: toText(usuario.Nombre),
+                    rol,
+                    tienda: toText(usuario.Tienda)
+                };
+                guardarSesion(sesion);
+                setStatus('Acceso correcto. Entrando...', true);
+                window.location.href = 'MenuMutuofine.html';
+            } catch (error) {
+                console.error(error);
+                setStatus(error.message || 'Error al conectar con Supabase.', false);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Entrar';
+            }
+        });
+    </script>
+</body>
+</html>
