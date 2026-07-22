@@ -257,6 +257,11 @@
             return value === undefined || value === null ? '' : String(value).trim();
         }
 
+        // Tolerante a "admin", "Admin", "Administrador", etc.
+        function esRolAdmin(valor) {
+            return toText(valor).toLowerCase().startsWith('admin');
+        }
+
         function escapeHtml(value) {
             return toText(value).replace(/[&<>"']/g, char => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
@@ -318,7 +323,7 @@
                 return;
             }
             usuariosCache.forEach(u => {
-                const rol = toText(u.Rol).toLowerCase() === 'admin' ? 'admin' : 'tienda';
+                const rol = esRolAdmin(u.Rol) ? 'admin' : 'tienda';
                 const activo = u.Activo === undefined || u.Activo === null ? true : Boolean(u.Activo);
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -344,7 +349,7 @@
             document.getElementById('u-ldap').value = toText(u.LDAP);
             document.getElementById('u-nombre').value = toText(u.Nombre);
             document.getElementById('u-pin').value = toText(u.PIN);
-            document.getElementById('u-rol').value = toText(u.Rol).toLowerCase() === 'admin' ? 'admin' : 'tienda';
+            document.getElementById('u-rol').value = esRolAdmin(u.Rol) ? 'admin' : 'tienda';
             document.getElementById('u-tienda').value = toText(u.Tienda);
             const activo = u.Activo === undefined || u.Activo === null ? true : Boolean(u.Activo);
             document.getElementById('u-activo').value = activo ? 'true' : 'false';

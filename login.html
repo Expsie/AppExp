@@ -141,6 +141,11 @@
             return value === undefined || value === null ? '' : String(value).trim();
         }
 
+        // Tolerante a "admin", "Admin", "Administrador", etc.
+        function esRolAdmin(valor) {
+            return toText(valor).toLowerCase().startsWith('admin');
+        }
+
         function guardarSesion(sesion) {
             localStorage.setItem(SESSION_KEY, JSON.stringify(sesion));
         }
@@ -177,7 +182,7 @@
                     setStatus('PIN incorrecto.', false);
                     return;
                 }
-                const rol = toText(usuario.Rol).toLowerCase() === 'admin' ? 'admin' : 'tienda';
+                const rol = esRolAdmin(usuario.Rol) ? 'admin' : 'tienda';
                 const sesion = {
                     ldap: toText(usuario.LDAP),
                     nombre: toText(usuario.Nombre),
