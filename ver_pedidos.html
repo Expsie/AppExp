@@ -908,9 +908,15 @@
                 detailsBtn.addEventListener('click', () => {
                     const isHidden = detailsRow.style.display === 'none';
                     if (isHidden) {
-                        detailsCell.innerHTML = (order.lineas && order.lineas.length)
-                            ? generateDetailsTable(order)
-                            : '<p class="muted" style="margin:8px 0;">Este pedido no tiene líneas.</p>';
+                        if (!order.lineas || !order.lineas.length) {
+                            detailsCell.innerHTML = '<p class="muted" style="margin:8px 0;">Este pedido no tiene líneas.</p>';
+                        } else if (sesionActual && sesionActual.rol === 'admin') {
+                            detailsCell.innerHTML = generateEditableDetailsTable(order);
+                            const guardarBtn = detailsCell.querySelector('.guardar-lineas-btn');
+                            guardarBtn.addEventListener('click', () => guardarEdicionLineas(order, detailsCell, guardarBtn));
+                        } else {
+                            detailsCell.innerHTML = generateDetailsTable(order);
+                        }
                         detailsRow.style.display = '';
                         detailsBtn.textContent = '▴';
                     } else {
@@ -1015,6 +1021,71 @@
             });
             html += '</tbody></table>';
             return html;
+        }
+
+        // Versión editable de la tabla de líneas: solo Cant. preparada y Ubicación
+        // preparación son editables, pensada para que un Administrador pueda
+        // corregir esos datos desde "Ver pedidos guardados".
+        function generateEditableDetailsTable(order) {
+            let html = '<table class="details-table"><thead><tr><th>Referencia</th><th>EAN</th><th>Designación</th><th>Sección</th><th>Cant. solicitada</th><th>Cant. disponible</th><th>Ubicaciones</th><th>SSCC</th><th>Cant. preparada</th><th>Ubicación preparación</th></tr></thead><tbody>';
+            order.lineas.forEach((l, idx) => {
+                const cantPreparadaValor = (l.cantPreparada === undefined || l.cantPreparada === null) ? '' : l.cantPreparada;
+                html += `<tr data-linea-idx="${idx}">
+                    <td>${escapeHtml(l.referencia)}</td>
+                    <td>${escapeHtml(getEan(l.referencia))}</td>
+                    <td>${escapeHtml(l.designacion)}</td>
+                    <td>${escapeHtml(l.seccion)}</td>
+                    <td>${escapeHtml(l.cantSolicitada)}</td>
+                    <td>${escapeHtml(l.cantDisponible)}</td>
+                    <td>${escapeHtml(l.ubicaciones)}</td>
+                    <td>${escapeHtml(l.sscc || '')}</td>
+                    <td><input type="number" class="edit-cant-preparada" min="0" value="${escapeHtml(cantPreparadaValor)}" style="width:90px;" /></td>
+                    <td><input type="text" class="edit-ubicacion-fisica" value="${escapeHtml(l.ubicacionFisica || '')}" style="width:160px;" /></td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            html += `
+                <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+                    <button type="button" class="btn btn-primary guardar-lineas-btn">Guardar cambios</button>
+                    <span class="muted guardar-lineas-status"></span>
+                </div>
+            `;
+            return html;
+        }
+
+        async function guardarEdicionLineas(order, detailsCell, guardarBtn) {
+            const filas = detailsCell.querySelectorAll('tr[data-linea-idx]');
+            const nuevasLineas = order.lineas.map((linea, idx) => {
+                const fila = Array.from(filas).find(f => Number(f.dataset.lineaIdx) === idx);
+                if (!fila) return linea;
+                const cantTexto = fila.querySelector('.edit-cant-preparada').value;
+                const ubicacion = fila.querySelector('.edit-ubicacion-fisica').value.trim();
+                return {
+                    ...linea,
+                    cantPreparada: cantTexto === '' ? null : toNumber(cantTexto),
+                    ubicacionFisica: ubicacion
+                };
+            });
+
+            const statusEl = detailsCell.querySelector('.guardar-lineas-status');
+            guardarBtn.disabled = true;
+            guardarBtn.textContent = 'Guardando...';
+            try {
+                await updateOrderState(order, { lineas: nuevasLineas });
+                if (statusEl) {
+                    statusEl.textContent = 'Guardado.';
+                    statusEl.style.color = 'var(--green-text)';
+                }
+            } catch (error) {
+                console.error(error);
+                if (statusEl) {
+                    statusEl.textContent = `Error: ${error.message}`;
+                    statusEl.style.color = '#b3261e';
+                }
+            } finally {
+                guardarBtn.disabled = false;
+                guardarBtn.textContent = 'Guardar cambios';
+            }
         }
 
         function exportOrderToExcel(order) {
