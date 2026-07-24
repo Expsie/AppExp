@@ -1343,6 +1343,8 @@
                         <span class="muted">${escapeHtml(linea.referencia)}</span>
                     </div>
                     <div class="prep-linea-row">Solicitada: <strong>${escapeHtml(linea.cantSolicitada)}</strong></div>
+                    <div class="prep-linea-row">Ubicación de recogida: <strong>${escapeHtml(linea.ubicaciones || '-')}</strong></div>
+                    <div class="prep-linea-row">SSCC: <strong>${escapeHtml(linea.sscc || '-')}</strong></div>
                     <label>Cantidad preparada</label>
                     <input type="number" class="prep-cant-input" min="0" value="${escapeHtml(cantPreparadaValor)}" ${soloLectura ? 'disabled' : ''} />
                     <label>Ubicación física</label>
