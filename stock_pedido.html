@@ -893,6 +893,11 @@
                 window.location.href = 'login.html';
                 return null;
             }
+            if (sesion.rol === 'preparador') {
+                alert('Tu perfil (Preparador) solo tiene acceso a "Ver pedidos guardados".');
+                window.location.href = 'ver_pedidos.html';
+                return null;
+            }
             return sesion;
         }
 

@@ -163,7 +163,7 @@
     </div>
 
     <div class="cards">
-        <a class="card stock" href="stock_pedido.html">
+        <a class="card stock" href="stock_pedido.html" id="card-stock">
             <div class="icon">📦</div>
             <h2>Gestor de stock y pedidos</h2>
             <p>Crea un pedido de stock validado en tiempo real contra el stock disponible de la tienda solicitante.</p>
@@ -211,10 +211,18 @@
                 window.location.href = 'login.html';
                 return;
             }
-            document.getElementById('sesion-nombre').textContent = `${sesion.nombre || sesion.ldap} (${sesion.rol === 'admin' ? 'Administrador' : 'Tienda ' + sesion.tienda})`;
+            const etiquetaRol = sesion.rol === 'admin'
+                ? 'Administrador'
+                : sesion.rol === 'preparador'
+                    ? 'Preparador'
+                    : 'Tienda ' + sesion.tienda;
+            document.getElementById('sesion-nombre').textContent = `${sesion.nombre || sesion.ldap} (${etiquetaRol})`;
             document.getElementById('logout-btn').addEventListener('click', cerrarSesion);
             if (sesion.rol === 'admin') {
                 document.getElementById('card-usuarios').style.display = '';
+            }
+            if (sesion.rol === 'preparador') {
+                document.getElementById('card-stock').style.display = 'none';
             }
         });
     </script>

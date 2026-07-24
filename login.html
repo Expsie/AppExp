@@ -146,6 +146,16 @@
             return toText(valor).toLowerCase().startsWith('admin');
         }
 
+        function esRolPreparador(valor) {
+            return toText(valor).toLowerCase().startsWith('prepar');
+        }
+
+        function calcularRol(valor) {
+            if (esRolAdmin(valor)) return 'admin';
+            if (esRolPreparador(valor)) return 'preparador';
+            return 'tienda';
+        }
+
         function guardarSesion(sesion) {
             localStorage.setItem(SESSION_KEY, JSON.stringify(sesion));
         }
@@ -182,7 +192,7 @@
                     setStatus('PIN incorrecto.', false);
                     return;
                 }
-                const rol = esRolAdmin(usuario.Rol) ? 'admin' : 'tienda';
+                const rol = calcularRol(usuario.Rol);
                 const sesion = {
                     ldap: toText(usuario.LDAP),
                     nombre: toText(usuario.Nombre),

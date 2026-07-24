@@ -191,9 +191,65 @@
         .badge-purple { background: var(--purple-bg); color: var(--purple-text); }
         .badge-orange { background: var(--orange-bg); color: var(--orange-text); }
         .badge-green { background: var(--green-bg); color: var(--green-text); }
+        .badge-amber { background: #fef3c7; color: #92400e; }
 
         .check-yes { color: var(--green-text); font-weight: 700; font-size: 16px; }
         .check-no { color: var(--muted); }
+
+        /* ---------- vista móvil Preparador (optimizada para TC26) ---------- */
+        #vista-preparador { max-width: 480px; margin: 0 auto; }
+        #vista-preparador input[type="text"],
+        #vista-preparador input[type="number"] {
+            width: 100%;
+            padding: 12px 14px;
+            font-size: 16px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface);
+            color: var(--text);
+        }
+        #vista-preparador label {
+            display: block;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--muted);
+            margin: 10px 0 6px 0;
+        }
+        .prep-lista { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+        .prep-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px;
+        }
+        .prep-card h3 { margin: 0 0 8px 0; font-size: 17px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .prep-card .meta { font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 14px; }
+        .prep-btn {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: 700;
+            border-radius: 10px;
+            border: none;
+            background: var(--accent-green);
+            color: #fff;
+            text-align: center;
+            cursor: pointer;
+        }
+        .prep-btn:active { background: var(--accent-green-dark); }
+        .prep-btn.locked { background: #eef0f3; color: var(--muted); cursor: default; }
+        .prep-detalle { margin-top: 14px; }
+        .prep-linea {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 12px;
+        }
+        .prep-linea-header { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+        .prep-linea-header strong { font-size: 15px; }
+        .prep-linea-row { font-size: 14px; margin-bottom: 4px; }
 
         .order-header-table { border-collapse: collapse; font-size: 13px; }
         .order-header-table td { padding: 4px 10px; border: none; }
@@ -221,6 +277,7 @@
         </div>
     </div>
 
+    <div id="vista-admin">
     <details class="panel">
         <summary>Actualizar stock en Supabase</summary>
         <div class="panel-body">
@@ -272,6 +329,7 @@
             <option value="en_preparacion">En preparación</option>
             <option value="asignado">Asignado</option>
             <option value="preparado">Preparado</option>
+            <option value="preparado_parcial">Preparado parcial</option>
         </select>
         <button type="button" id="bulk-apply-btn" class="btn btn-outline" disabled>✓ Aplicar</button>
         <div class="toolbar-spacer"></div>
@@ -295,6 +353,7 @@
                             <option value="en_preparacion">En preparación</option>
                             <option value="asignado">Asignado</option>
                             <option value="preparado">Preparado</option>
+                            <option value="preparado_parcial">Preparado parcial</option>
                         </select>
                     </th>
                     <th></th>
@@ -315,6 +374,16 @@
             </thead>
             <tbody></tbody>
         </table>
+    </div>
+    </div>
+
+    <div id="vista-preparador" style="display:none;">
+        <div class="field" style="max-width:420px;">
+            <label for="prep-buscar">Buscar por Nº pedido o tienda</label>
+            <input type="text" id="prep-buscar" placeholder="Ej. 1945 o T038" />
+        </div>
+        <div id="prep-lista-pedidos" class="prep-lista"></div>
+        <div id="prep-detalle" class="prep-detalle" style="display:none;"></div>
     </div>
 </div>
 
@@ -347,7 +416,9 @@
                 fecha: 'Fecha',
                 lineas: 'lineas',
                 impreso: 'impreso',
-                preparado: 'preparado'
+                preparado: 'preparado',
+                estadoPreparacion: 'EstadoPreparacion',
+                preparadoPor: 'PreparadoPor'
             },
             {
                 name: 'pedidos: mayúscula inicial',
@@ -359,7 +430,9 @@
                 fecha: 'Fecha',
                 lineas: 'Lineas',
                 impreso: 'Impreso',
-                preparado: 'Preparado'
+                preparado: 'Preparado',
+                estadoPreparacion: 'EstadoPreparacion',
+                preparadoPor: 'PreparadoPor'
             },
             {
                 name: 'pedidos: cabecera en mayúsculas y líneas minúscula',
@@ -371,7 +444,9 @@
                 fecha: 'Fecha',
                 lineas: 'lineas',
                 impreso: 'Impreso',
-                preparado: 'Preparado'
+                preparado: 'Preparado',
+                estadoPreparacion: 'EstadoPreparacion',
+                preparadoPor: 'PreparadoPor'
             }
         ];
 
@@ -455,6 +530,10 @@
 
         function sameTienda(a, b) {
             return normalizeTiendaCode(a) === normalizeTiendaCode(b);
+        }
+
+        function sameText(a, b) {
+            return toText(a).toLowerCase() === toText(b).toLowerCase();
         }
 
         function escapeHtml(value) {
@@ -626,6 +705,8 @@
                 lineas,
                 impreso: toBool(pick(row, ['impreso', 'Impreso'], false)),
                 preparado: toBool(pick(row, ['preparado', 'Preparado'], false)),
+                estadoPreparacion: toText(pick(row, ['EstadoPreparacion', 'estadoPreparacion', 'estado_preparacion'], '')).toLowerCase(),
+                preparadoPor: toText(pick(row, ['PreparadoPor', 'preparadoPor', 'preparado_por'], '')),
                 _raw: row
             };
         }
@@ -651,7 +732,11 @@
                 const [orders] = await Promise.all([fetchPedidos(), cargarEanMap()]);
                 pedidosCache = orders;
                 setStatus(`Conectado. Pedidos: ${pedidosCache.length}.`, true);
-                applyFilters();
+                if (sesionActual && sesionActual.rol === 'preparador') {
+                    renderPreparadorLista();
+                } else {
+                    applyFilters();
+                }
             } catch (error) {
                 console.error(error);
                 setStatus(error.message, false);
@@ -688,6 +773,8 @@
             if (Object.prototype.hasOwnProperty.call(changes, 'lineas')) row[mapping.lineas] = changes.lineas;
             if (Object.prototype.hasOwnProperty.call(changes, 'impreso')) row[mapping.impreso] = changes.impreso;
             if (Object.prototype.hasOwnProperty.call(changes, 'preparado')) row[mapping.preparado] = changes.preparado;
+            if (Object.prototype.hasOwnProperty.call(changes, 'estadoPreparacion')) row[mapping.estadoPreparacion] = changes.estadoPreparacion;
+            if (Object.prototype.hasOwnProperty.call(changes, 'preparadoPor')) row[mapping.preparadoPor] = changes.preparadoPor;
             return row;
         }
 
@@ -728,15 +815,18 @@
 
         // ---------- estado derivado de impreso/preparado ----------
         function getOrderEstado(order) {
-            if (order.preparado) return { value: 'preparado', label: 'PREPARADO', cls: 'badge-green' };
-            if (order.impreso) return { value: 'asignado', label: 'ASIGNADO', cls: 'badge-purple' };
+            const ep = toText(order.estadoPreparacion).toLowerCase();
+            if (ep === 'preparado') return { value: 'preparado', label: 'PREPARADO', cls: 'badge-green' };
+            if (ep === 'preparado_parcial') return { value: 'preparado_parcial', label: 'PREPARADO PARCIAL', cls: 'badge-amber' };
+            if (ep === 'asignado') return { value: 'asignado', label: 'ASIGNADO', cls: 'badge-purple' };
             return { value: 'en_preparacion', label: 'EN PREPARACIÓN', cls: 'badge-orange' };
         }
 
         function estadoValueToChanges(value) {
-            if (value === 'preparado') return { impreso: true, preparado: true };
-            if (value === 'asignado') return { impreso: true, preparado: false };
-            return { impreso: false, preparado: false }; // en_preparacion
+            if (value === 'preparado') return { estadoPreparacion: 'preparado' };
+            if (value === 'preparado_parcial') return { estadoPreparacion: 'preparado_parcial' };
+            if (value === 'asignado') return { estadoPreparacion: 'asignado', preparadoPor: (sesionActual && sesionActual.ldap) || '' };
+            return { estadoPreparacion: 'en_preparacion', preparadoPor: '' };
         }
 
         function applyFilters() {
@@ -795,7 +885,7 @@
                     <td>${escapeHtml(order.cc)}</td>
                     <td>${escapeHtml(order.circuito)}</td>
                     <td>${escapeHtml(formatDate(order.fecha))}</td>
-                    <td><span class="badge ${estado.cls}">${estado.label}</span></td>
+                    <td><span class="badge ${estado.cls}">${estado.label}</span>${order.preparadoPor ? `<div class="muted" style="font-size:11px;margin-top:3px;">${escapeHtml(order.preparadoPor)}</div>` : ''}</td>
                     <td style="text-align:center;">${order.impreso ? '<span class="check-yes" title="Impreso">✔</span>' : '<span class="check-no" title="No impreso">—</span>'}</td>
                     <td>
                         <button type="button" class="btn-icon details-btn" title="Ver líneas del pedido">▾</button>
@@ -918,9 +1008,10 @@
         }
 
         function generateDetailsTable(order) {
-            let html = '<table class="details-table"><thead><tr><th>Referencia</th><th>EAN</th><th>Designación</th><th>Sección</th><th>Cant. solicitada</th><th>Cant. disponible</th><th>Ubicaciones</th><th>SSCC</th></tr></thead><tbody>';
+            let html = '<table class="details-table"><thead><tr><th>Referencia</th><th>EAN</th><th>Designación</th><th>Sección</th><th>Cant. solicitada</th><th>Cant. disponible</th><th>Ubicaciones</th><th>SSCC</th><th>Cant. preparada</th><th>Ubicación preparación</th></tr></thead><tbody>';
             order.lineas.forEach(l => {
-                html += `<tr><td>${escapeHtml(l.referencia)}</td><td>${escapeHtml(getEan(l.referencia))}</td><td>${escapeHtml(l.designacion)}</td><td>${escapeHtml(l.seccion)}</td><td>${escapeHtml(l.cantSolicitada)}</td><td>${escapeHtml(l.cantDisponible)}</td><td>${escapeHtml(l.ubicaciones)}</td><td>${escapeHtml(l.sscc || '')}</td></tr>`;
+                const cantPreparada = (l.cantPreparada === undefined || l.cantPreparada === null) ? '-' : l.cantPreparada;
+                html += `<tr><td>${escapeHtml(l.referencia)}</td><td>${escapeHtml(getEan(l.referencia))}</td><td>${escapeHtml(l.designacion)}</td><td>${escapeHtml(l.seccion)}</td><td>${escapeHtml(l.cantSolicitada)}</td><td>${escapeHtml(l.cantDisponible)}</td><td>${escapeHtml(l.ubicaciones)}</td><td>${escapeHtml(l.sscc || '')}</td><td>${escapeHtml(cantPreparada)}</td><td>${escapeHtml(l.ubicacionFisica || '')}</td></tr>`;
             });
             html += '</tbody></table>';
             return html;
@@ -934,9 +1025,10 @@
             wsData.push(['Circuito', order.circuito]);
             wsData.push(['Fecha', formatDate(order.fecha)]);
             wsData.push(['Estado', getOrderEstado(order).label]);
+            wsData.push(['Preparado por', order.preparadoPor || '']);
             wsData.push([]);
-            wsData.push(['Referencia', 'EAN', 'Designación', 'Sección', 'Cant. solicitada', 'Cant. disponible', 'Ubicaciones', 'SSCC']);
-            order.lineas.forEach(l => wsData.push([l.referencia, getEan(l.referencia), l.designacion, l.seccion, l.cantSolicitada, l.cantDisponible, l.ubicaciones, l.sscc || '']));
+            wsData.push(['Referencia', 'EAN', 'Designación', 'Sección', 'Cant. solicitada', 'Cant. disponible', 'Ubicaciones', 'SSCC', 'Cant. preparada', 'Ubicación preparación']);
+            order.lineas.forEach(l => wsData.push([l.referencia, getEan(l.referencia), l.designacion, l.seccion, l.cantSolicitada, l.cantDisponible, l.ubicaciones, l.sscc || '', (l.cantPreparada === undefined || l.cantPreparada === null) ? '' : l.cantPreparada, l.ubicacionFisica || '']));
             const worksheet = XLSX.utils.aoa_to_sheet(wsData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, 'Pedido');
@@ -1078,13 +1170,211 @@
             return sesion;
         }
 
+        // ---------- vista Preparador (móvil, TC26) ----------
+        function renderPreparadorLista() {
+            const cont = document.getElementById('prep-lista-pedidos');
+            const detalle = document.getElementById('prep-detalle');
+            detalle.style.display = 'none';
+            cont.style.display = '';
+
+            const buscarEl = document.getElementById('prep-buscar');
+            const buscar = buscarEl ? buscarEl.value.trim().toLowerCase() : '';
+
+            let lista = pedidosCache.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+            if (buscar) {
+                lista = lista.filter(o => String(o.id).toLowerCase().includes(buscar) || toText(o.tienda).toLowerCase().includes(buscar));
+            }
+
+            cont.innerHTML = '';
+            if (!lista.length) {
+                cont.innerHTML = '<p class="muted" style="text-align:center;padding:30px 0;">No hay pedidos.</p>';
+                return;
+            }
+
+            lista.forEach(order => {
+                const estado = getOrderEstado(order);
+                const esMio = sesionActual && sameText(order.preparadoPor, sesionActual.ldap);
+                const card = document.createElement('div');
+                card.className = 'prep-card';
+
+                let accionHtml = '';
+                if (estado.value === 'en_preparacion') {
+                    accionHtml = '<button type="button" class="prep-btn prep-empezar-btn">Empezar preparación</button>';
+                } else if (estado.value === 'asignado' && esMio) {
+                    accionHtml = '<button type="button" class="prep-btn prep-continuar-btn">Continuar preparación</button>';
+                } else if (estado.value === 'asignado') {
+                    accionHtml = `<div class="prep-btn locked">Bloqueado · en preparación por ${escapeHtml(order.preparadoPor || 'otro usuario')}</div>`;
+                } else {
+                    accionHtml = '<button type="button" class="prep-btn prep-ver-btn" style="background:#eef0f3;color:var(--text);">Ver detalle</button>';
+                }
+
+                card.innerHTML = `
+                    <h3>Pedido #${escapeHtml(order.id)} <span class="badge ${estado.cls}">${estado.label}</span></h3>
+                    <div class="meta">
+                        ${escapeHtml(order.tienda)} · CC ${escapeHtml(order.cc)} · ${escapeHtml(order.circuito)}<br>
+                        ${escapeHtml(formatDate(order.fecha))} · ${(order.lineas || []).length} líneas
+                        ${order.preparadoPor ? `<br>Preparador: ${escapeHtml(order.preparadoPor)}` : ''}
+                    </div>
+                `;
+                card.insertAdjacentHTML('beforeend', accionHtml);
+
+                const empezarBtn = card.querySelector('.prep-empezar-btn');
+                if (empezarBtn) empezarBtn.addEventListener('click', () => empezarPreparacion(order));
+                const continuarBtn = card.querySelector('.prep-continuar-btn');
+                if (continuarBtn) continuarBtn.addEventListener('click', () => renderPreparadorDetalle(order, false));
+                const verBtn = card.querySelector('.prep-ver-btn');
+                if (verBtn) verBtn.addEventListener('click', () => renderPreparadorDetalle(order, true));
+
+                cont.appendChild(card);
+            });
+        }
+
+        async function empezarPreparacion(order) {
+            try {
+                await updateOrderState(order, { estadoPreparacion: 'asignado', preparadoPor: sesionActual.ldap });
+                renderPreparadorDetalle(order, false);
+            } catch (error) {
+                console.error(error);
+                alert(`Error al asignarte el pedido: ${error.message}`);
+            }
+        }
+
+        function renderPreparadorDetalle(order, soloLectura) {
+            document.getElementById('prep-lista-pedidos').style.display = 'none';
+            const cont = document.getElementById('prep-detalle');
+            cont.style.display = '';
+
+            const lineas = order.lineas || [];
+            cont.innerHTML = `
+                <button type="button" id="prep-volver-btn" class="btn btn-ghost" style="padding:0;margin-bottom:14px;font-size:14px;">← Volver a la lista</button>
+                <h2 style="margin:0 0 4px 0;">Pedido #${escapeHtml(order.id)}</h2>
+                <p class="muted" style="margin:0 0 16px 0;">${escapeHtml(order.tienda)} · CC ${escapeHtml(order.cc)} · ${escapeHtml(order.circuito)}</p>
+                <div id="prep-lineas"></div>
+                ${soloLectura ? '' : `
+                <div style="display:flex; flex-direction:column; gap:10px; margin-top:6px;">
+                    <button type="button" id="prep-finalizar-btn" class="prep-btn">✓ Finalizar preparación</button>
+                    <button type="button" id="prep-guardar-btn" class="btn btn-outline" style="padding:14px;font-size:15px;">Guardar avance</button>
+                    <button type="button" id="prep-liberar-btn" class="btn btn-outline" style="padding:14px;font-size:15px;color:#b3261e;">Liberar pedido</button>
+                </div>
+                `}
+            `;
+
+            const lineasCont = cont.querySelector('#prep-lineas');
+            lineas.forEach(linea => {
+                const div = document.createElement('div');
+                div.className = 'prep-linea';
+                const cantPreparadaValor = (linea.cantPreparada === undefined || linea.cantPreparada === null)
+                    ? (soloLectura ? '' : linea.cantSolicitada)
+                    : linea.cantPreparada;
+                div.innerHTML = `
+                    <div class="prep-linea-header">
+                        <strong>${escapeHtml(linea.designacion || linea.referencia)}</strong>
+                        <span class="muted">${escapeHtml(linea.referencia)}</span>
+                    </div>
+                    <div class="prep-linea-row">Solicitada: <strong>${escapeHtml(linea.cantSolicitada)}</strong></div>
+                    <label>Cantidad preparada</label>
+                    <input type="number" class="prep-cant-input" min="0" value="${escapeHtml(cantPreparadaValor)}" ${soloLectura ? 'disabled' : ''} />
+                    <label>Ubicación física</label>
+                    <input type="text" class="prep-ubi-input" placeholder="Ubicación donde se deja el producto" value="${escapeHtml(linea.ubicacionFisica || '')}" ${soloLectura ? 'disabled' : ''} />
+                `;
+                lineasCont.appendChild(div);
+            });
+
+            cont.querySelector('#prep-volver-btn').addEventListener('click', () => renderPreparadorLista());
+
+            if (!soloLectura) {
+                cont.querySelector('#prep-guardar-btn').addEventListener('click', () => guardarAvancePreparacion(order, false));
+                cont.querySelector('#prep-finalizar-btn').addEventListener('click', () => guardarAvancePreparacion(order, true));
+                cont.querySelector('#prep-liberar-btn').addEventListener('click', () => liberarPedidoPreparacion(order));
+            }
+        }
+
+        async function guardarAvancePreparacion(order, finalizar) {
+            const filas = document.querySelectorAll('#prep-lineas .prep-linea');
+            const nuevasLineas = order.lineas.map((linea, idx) => {
+                const fila = filas[idx];
+                const cantInput = fila.querySelector('.prep-cant-input');
+                const ubiInput = fila.querySelector('.prep-ubi-input');
+                const cantTexto = cantInput.value;
+                return {
+                    ...linea,
+                    cantPreparada: cantTexto === '' ? null : toNumber(cantTexto),
+                    ubicacionFisica: ubiInput.value.trim()
+                };
+            });
+
+            if (finalizar) {
+                const faltaAlguna = nuevasLineas.some(l => l.cantPreparada === null || l.cantPreparada === undefined);
+                if (faltaAlguna) {
+                    alert('Completa la cantidad preparada de todas las líneas antes de finalizar.');
+                    return;
+                }
+            }
+
+            const changes = { lineas: nuevasLineas };
+            if (finalizar) {
+                const todasExactas = nuevasLineas.every(l => toNumber(l.cantPreparada) === toNumber(l.cantSolicitada));
+                changes.estadoPreparacion = todasExactas ? 'preparado' : 'preparado_parcial';
+            }
+
+            const btnFinalizar = document.getElementById('prep-finalizar-btn');
+            const btnGuardar = document.getElementById('prep-guardar-btn');
+            if (btnFinalizar) btnFinalizar.disabled = true;
+            if (btnGuardar) btnGuardar.disabled = true;
+            try {
+                await updateOrderState(order, changes);
+                if (finalizar) {
+                    alert('Pedido finalizado correctamente.');
+                    renderPreparadorLista();
+                } else {
+                    alert('Avance guardado.');
+                }
+            } catch (error) {
+                console.error(error);
+                alert(`Error al guardar: ${error.message}`);
+            } finally {
+                if (btnFinalizar) btnFinalizar.disabled = false;
+                if (btnGuardar) btnGuardar.disabled = false;
+            }
+        }
+
+        async function liberarPedidoPreparacion(order) {
+            if (!confirm('¿Liberar este pedido? Volverá a estar disponible para cualquier preparador.')) return;
+            try {
+                await updateOrderState(order, { estadoPreparacion: 'en_preparacion', preparadoPor: '' });
+                renderPreparadorLista();
+            } catch (error) {
+                console.error(error);
+                alert(`Error al liberar el pedido: ${error.message}`);
+            }
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
             const sesion = exigirSesion();
             if (!sesion) return;
             sesionActual = sesion;
-            document.getElementById('sesion-info').textContent =
-                `${sesion.nombre || sesion.ldap} · ${sesion.rol === 'admin' ? 'Administrador' : 'Tienda ' + sesion.tienda}`;
+
+            const etiquetaRol = sesion.rol === 'admin'
+                ? 'Administrador'
+                : sesion.rol === 'preparador'
+                    ? 'Preparador'
+                    : 'Tienda ' + sesion.tienda;
+            document.getElementById('sesion-info').textContent = `${sesion.nombre || sesion.ldap} · ${etiquetaRol}`;
             document.getElementById('logout-btn').addEventListener('click', cerrarSesion);
+
+            const esPreparador = sesion.rol === 'preparador';
+            document.getElementById('vista-admin').style.display = esPreparador ? 'none' : '';
+            document.getElementById('vista-preparador').style.display = esPreparador ? '' : 'none';
+
+            if (esPreparador) {
+                const buscarEl = document.getElementById('prep-buscar');
+                buscarEl.addEventListener('input', renderPreparadorLista);
+                document.getElementById('refresh-orders-btn').addEventListener('click', cargarPedidosSupabase);
+                document.getElementById('logout-btn').addEventListener('click', cerrarSesion);
+                cargarPedidosSupabase();
+                setInterval(cargarPedidosSupabase, REFRESH_INTERVAL_MS);
+                return;
+            }
 
             document.getElementById('refresh-orders-btn').addEventListener('click', () => {
                 cargarPedidosSupabase();

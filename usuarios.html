@@ -131,6 +131,7 @@
         }
         .badge-admin { background: var(--purple-bg); color: var(--purple-text); }
         .badge-tienda { background: #eef0f3; color: var(--muted); }
+        .badge-preparador { background: #fef3c7; color: #92400e; }
         .badge-activo { background: var(--green-bg); color: var(--green-text); }
         .badge-inactivo { background: #fdecec; color: #b3261e; }
     </style>
@@ -171,6 +172,7 @@
                 <label for="u-rol">Rol</label>
                 <select id="u-rol">
                     <option value="tienda">Tienda</option>
+                    <option value="preparador">Preparador</option>
                     <option value="admin">Administrador</option>
                 </select>
             </div>
@@ -262,6 +264,16 @@
             return toText(valor).toLowerCase().startsWith('admin');
         }
 
+        function esRolPreparador(valor) {
+            return toText(valor).toLowerCase().startsWith('prepar');
+        }
+
+        function calcularRol(valor) {
+            if (esRolAdmin(valor)) return 'admin';
+            if (esRolPreparador(valor)) return 'preparador';
+            return 'tienda';
+        }
+
         function escapeHtml(value) {
             return toText(value).replace(/[&<>"']/g, char => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
@@ -323,14 +335,16 @@
                 return;
             }
             usuariosCache.forEach(u => {
-                const rol = esRolAdmin(u.Rol) ? 'admin' : 'tienda';
+                const rol = calcularRol(u.Rol);
+                const rolLabel = rol === 'admin' ? 'Administrador' : rol === 'preparador' ? 'Preparador' : 'Tienda';
+                const rolCls = rol === 'admin' ? 'badge-admin' : rol === 'preparador' ? 'badge-preparador' : 'badge-tienda';
                 const activo = u.Activo === undefined || u.Activo === null ? true : Boolean(u.Activo);
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${escapeHtml(u.LDAP)}</td>
                     <td>${escapeHtml(u.Nombre)}</td>
-                    <td><span class="badge ${rol === 'admin' ? 'badge-admin' : 'badge-tienda'}">${rol === 'admin' ? 'Administrador' : 'Tienda'}</span></td>
-                    <td>${rol === 'admin' ? '<span class="muted">Todas</span>' : escapeHtml(u.Tienda || '-')}</td>
+                    <td><span class="badge ${rolCls}">${rolLabel}</span></td>
+                    <td>${rol === 'tienda' ? escapeHtml(u.Tienda || '-') : '<span class="muted">Todas</span>'}</td>
                     <td><span class="badge ${activo ? 'badge-activo' : 'badge-inactivo'}">${activo ? 'Activo' : 'Inactivo'}</span></td>
                     <td>
                         <button type="button" class="btn-icon editar-btn" title="Editar">✎</button>
@@ -349,7 +363,7 @@
             document.getElementById('u-ldap').value = toText(u.LDAP);
             document.getElementById('u-nombre').value = toText(u.Nombre);
             document.getElementById('u-pin').value = toText(u.PIN);
-            document.getElementById('u-rol').value = esRolAdmin(u.Rol) ? 'admin' : 'tienda';
+            document.getElementById('u-rol').value = calcularRol(u.Rol);
             document.getElementById('u-tienda').value = toText(u.Tienda);
             const activo = u.Activo === undefined || u.Activo === null ? true : Boolean(u.Activo);
             document.getElementById('u-activo').value = activo ? 'true' : 'false';
@@ -372,8 +386,8 @@
         }
 
         function actualizarVisibilidadTienda() {
-            const esAdmin = document.getElementById('u-rol').value === 'admin';
-            document.getElementById('u-tienda-field').style.display = esAdmin ? 'none' : '';
+            const esTienda = document.getElementById('u-rol').value === 'tienda';
+            document.getElementById('u-tienda-field').style.display = esTienda ? '' : 'none';
         }
 
         async function guardarUsuario() {
@@ -381,7 +395,7 @@
             const nombre = document.getElementById('u-nombre').value.trim();
             const pin = document.getElementById('u-pin').value.trim();
             const rol = document.getElementById('u-rol').value;
-            const tienda = rol === 'admin' ? '' : document.getElementById('u-tienda').value;
+            const tienda = rol === 'tienda' ? document.getElementById('u-tienda').value : '';
             const activo = document.getElementById('u-activo').value === 'true';
 
             if (!ldap || !pin) {
