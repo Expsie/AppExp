@@ -378,9 +378,12 @@
     </div>
 
     <div id="vista-preparador" style="display:none;">
-        <div class="field" style="max-width:420px;">
-            <label for="prep-buscar">Buscar por Nº pedido o tienda</label>
-            <input type="text" id="prep-buscar" placeholder="Ej. 1945 o T038" />
+        <div style="display:flex; align-items:flex-end; gap:10px;">
+            <div class="field" style="max-width:420px; flex:1;">
+                <label for="prep-buscar">Buscar por Nº pedido o tienda</label>
+                <input type="text" id="prep-buscar" placeholder="Ej. 1945 o T038" />
+            </div>
+            <button type="button" id="prep-config-impresora-btn" class="btn btn-outline" title="Configurar servidor de impresión de etiquetas" style="margin-bottom:0;">⚙</button>
         </div>
         <div id="prep-lista-pedidos" class="prep-lista"></div>
         <div id="prep-detalle" class="prep-detalle" style="display:none;"></div>
@@ -546,6 +549,20 @@
             return `select=${columns.map(encodeURIComponent).join(',')}&limit=0`;
         }
 
+        // Cuenta cuántas filas del Excel traían una cantidad (Qty) decimal, para
+        // avisar de que se han redondeado a entero (la columna Qty en Supabase
+        // es de tipo bigint y no admite decimales).
+        function contarQtyDecimales(rows) {
+            let contador = 0;
+            rows.forEach(r => {
+                const obj = {};
+                for (const key of Object.keys(r)) obj[normalizeKey(key)] = r[key];
+                const valor = toNumber(obj.qty || 0);
+                if (!Number.isInteger(valor)) contador += 1;
+            });
+            return contador;
+        }
+
         function mapExcelRowsToStock(rows, importTimestamp) {
             const normalizedRows = rows.map(r => {
                 const obj = {};
@@ -561,7 +578,7 @@
                 "EAN code": toText(r.eancode || ''),
                 "Product name": toText(r.productname || ''),
                 "Department": toText(r.department || ''),
-                "Qty": toNumber(r.qty || 0),
+                "Qty": Math.round(toNumber(r.qty || 0)),
                 "Fecha Importacion": importTimestamp
             })).filter(item => item["Product Code"]);
         }
@@ -608,6 +625,7 @@
                 const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
                 const importTimestamp = new Date().toISOString();
                 const articles = mapExcelRowsToStock(rows, importTimestamp);
+                const decimalesRedondeados = contarQtyDecimales(rows);
                 if (!articles.length) {
                     setImportStatus('No se encontraron artículos válidos en el Excel.', false);
                     return;
@@ -621,7 +639,10 @@
                 }
                 setImportStatus('Subiendo stock a Supabase...', true);
                 await reemplazarStockSupabase(articles);
-                setImportStatus(`Se importaron ${articles.length} artículos en StockDispo.`, true);
+                const avisoDecimales = decimalesRedondeados > 0
+                    ? ` Aviso: ${decimalesRedondeados} artículo(s) tenían cantidad decimal y se redondearon a entero.`
+                    : '';
+                setImportStatus(`Se importaron ${articles.length} artículos en StockDispo.${avisoDecimales}`, true);
                 await cargarEanMap();
                 updateLastImportDisplay(importTimestamp);
             } catch (error) {
@@ -1168,9 +1189,10 @@
             abrirVentanaImpresion('Imprimir Pedido', styleCss, bodyHtml);
         }
 
-        // Etiqueta de 10 cm de ancho x 15 cm de largo, pensada para salir por la
-        // impresora de etiquetas Monarch "Lp501i065" (10.24.113.173). Solo debe
-        // mostrar la Tienda y el CC, en grande y centrado.
+        // Etiqueta de 10 cm de ancho x 15 cm de largo. Se usa tanto desde la vista
+        // de administración/tienda (impresora Monarch "Lp501i065", 10.24.113.173)
+        // como desde la vista Preparador (impresora de red "lp501i066",
+        // 10.25.252.230). Solo debe mostrar la Tienda y el CC, en grande y centrado.
         function printLabel(order) {
             const styleCss = `
                 @page { size: 10cm 15cm; margin: 0; }
@@ -1288,6 +1310,7 @@
                     </div>
                 `;
                 card.insertAdjacentHTML('beforeend', accionHtml);
+                card.insertAdjacentHTML('beforeend', '<button type="button" class="prep-btn prep-etiqueta-btn" style="background:#eef0f3;color:var(--text);margin-top:8px;">🏷 Imprimir etiqueta</button>');
 
                 const empezarBtn = card.querySelector('.prep-empezar-btn');
                 if (empezarBtn) empezarBtn.addEventListener('click', () => empezarPreparacion(order));
@@ -1295,9 +1318,49 @@
                 if (continuarBtn) continuarBtn.addEventListener('click', () => renderPreparadorDetalle(order, false));
                 const verBtn = card.querySelector('.prep-ver-btn');
                 if (verBtn) verBtn.addEventListener('click', () => renderPreparadorDetalle(order, true));
+                card.querySelector('.prep-etiqueta-btn').addEventListener('click', () => imprimirEtiquetaPreparador(order));
 
                 cont.appendChild(card);
             });
+        }
+
+        // ---------- impresión de etiquetas vía servidor puente (impresora lp501i066) ----------
+        const PUENTE_IMPRESION_KEY = 'puenteImpresionUrl';
+
+        function getPuenteImpresionUrl() {
+            return localStorage.getItem(PUENTE_IMPRESION_KEY) || '';
+        }
+
+        function configurarPuenteImpresion() {
+            const actual = getPuenteImpresionUrl();
+            const nueva = prompt(
+                'URL del servidor puente de impresión de etiquetas (lo que ves al ejecutar server.js en el PC de esa red), por ejemplo:\nhttp://192.168.1.50:9123/imprimir-etiqueta',
+                actual || 'http://'
+            );
+            if (nueva === null) return;
+            localStorage.setItem(PUENTE_IMPRESION_KEY, nueva.trim());
+        }
+
+        async function imprimirEtiquetaPreparador(order) {
+            let url = getPuenteImpresionUrl();
+            if (!url) {
+                configurarPuenteImpresion();
+                url = getPuenteImpresionUrl();
+                if (!url) return;
+            }
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tienda: order.tienda, cc: order.cc })
+                });
+                const texto = await response.text();
+                if (!response.ok) throw new Error(texto || `Error ${response.status}`);
+                alert('Etiqueta enviada a la impresora.');
+            } catch (error) {
+                console.error(error);
+                alert(`No se pudo enviar la etiqueta al servidor de impresión: ${error.message}\n\nComprueba que el servidor puente esté encendido y que la URL configurada (⚙) sea correcta.`);
+            }
         }
 
         async function empezarPreparacion(order) {
@@ -1320,6 +1383,7 @@
                 <button type="button" id="prep-volver-btn" class="btn btn-ghost" style="padding:0;margin-bottom:14px;font-size:14px;">← Volver a la lista</button>
                 <h2 style="margin:0 0 4px 0;">Pedido #${escapeHtml(order.id)}</h2>
                 <p class="muted" style="margin:0 0 16px 0;">${escapeHtml(order.tienda)} · CC ${escapeHtml(order.cc)} · ${escapeHtml(order.circuito)}</p>
+                <button type="button" id="prep-etiqueta-detalle-btn" class="btn btn-outline" style="width:100%;padding:14px;font-size:15px;margin-bottom:16px;">🏷 Imprimir etiqueta</button>
                 <div id="prep-lineas"></div>
                 ${soloLectura ? '' : `
                 <div style="display:flex; flex-direction:column; gap:10px; margin-top:6px;">
@@ -1329,6 +1393,7 @@
                 </div>
                 `}
             `;
+            cont.querySelector('#prep-etiqueta-detalle-btn').addEventListener('click', () => imprimirEtiquetaPreparador(order));
 
             const lineasCont = cont.querySelector('#prep-lineas');
             lineas.forEach(linea => {
@@ -1442,6 +1507,7 @@
             if (esPreparador) {
                 const buscarEl = document.getElementById('prep-buscar');
                 buscarEl.addEventListener('input', renderPreparadorLista);
+                document.getElementById('prep-config-impresora-btn').addEventListener('click', configurarPuenteImpresion);
                 document.getElementById('refresh-orders-btn').addEventListener('click', cargarPedidosSupabase);
                 document.getElementById('logout-btn').addEventListener('click', cerrarSesion);
                 cargarPedidosSupabase();

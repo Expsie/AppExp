@@ -1,0 +1,10 @@
+{
+  "name": "puente-impresion-etiquetas",
+  "version": "1.0.0",
+  "description": "Servidor puente HTTP -> socket TCP para imprimir etiquetas ZPL en la impresora de red lp501i066",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "UNLICENSED"
+}
