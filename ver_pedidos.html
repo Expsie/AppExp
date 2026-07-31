@@ -383,7 +383,7 @@
                 <label for="prep-buscar">Buscar por Nº pedido o tienda</label>
                 <input type="text" id="prep-buscar" placeholder="Ej. 1945 o T038" />
             </div>
-            <button type="button" id="prep-config-impresora-btn" class="btn btn-outline" title="Configurar servidor de impresión de etiquetas" style="margin-bottom:0;">⚙</button>
+            <button type="button" id="prep-config-impresora-btn" class="btn btn-outline" title="Configurar IP de la impresora de etiquetas" style="margin-bottom:0;">⚙</button>
         </div>
         <div id="prep-lista-pedidos" class="prep-lista"></div>
         <div id="prep-detalle" class="prep-detalle" style="display:none;"></div>
@@ -1324,42 +1324,78 @@
             });
         }
 
-        // ---------- impresión de etiquetas vía servidor puente (impresora lp501i066) ----------
-        const PUENTE_IMPRESION_KEY = 'puenteImpresionUrl';
+        // ---------- impresión de etiquetas: directo a la impresora Zebra (lp501i066) ----------
+        // La impresora tiene un mini servidor web que acepta imprimir mandando el
+        // texto de la etiqueta por HTTP POST a http://IP_IMPRESORA/pstprnt
+        // (documentado por Zebra, viene activado de fábrica en la mayoría de sus
+        // impresoras). No pasa por CUPS ni por ningún servidor intermedio.
+        //
+        // Aviso: la impresora no envía cabeceras CORS, así que usamos
+        // fetch(..., { mode: 'no-cors' }). Esto permite que el navegador SÍ mande
+        // la petición (y la impresora imprima), pero nuestro código NO puede leer
+        // si la respuesta fue correcta o no — es una limitación del propio
+        // mecanismo. Por eso, tras pulsar el botón, hay que mirar físicamente si
+        // ha salido la etiqueta.
+        const IMPRESORA_IP_KEY = 'impresoraEtiquetaIp';
 
-        function getPuenteImpresionUrl() {
-            return localStorage.getItem(PUENTE_IMPRESION_KEY) || '';
+        function getImpresoraIp() {
+            return localStorage.getItem(IMPRESORA_IP_KEY) || '10.25.252.230';
         }
 
-        function configurarPuenteImpresion() {
-            const actual = getPuenteImpresionUrl();
+        function configurarImpresora() {
+            const actual = getImpresoraIp();
             const nueva = prompt(
-                'URL del servidor puente de impresión de etiquetas (lo que ves al ejecutar server.js en el PC de esa red), por ejemplo:\nhttp://192.168.1.50:9123/imprimir-etiqueta',
-                actual || 'http://'
+                'IP de la impresora de etiquetas (Zebra lp501i066):',
+                actual
             );
             if (nueva === null) return;
-            localStorage.setItem(PUENTE_IMPRESION_KEY, nueva.trim());
+            localStorage.setItem(IMPRESORA_IP_KEY, nueva.trim());
+        }
+
+        function escaparTextoEtiqueta(texto) {
+            return String(texto || '').replace(/[\^~]/g, '');
+        }
+
+        // CPCL (Comtec Printer Control Language): lenguaje nativo de esta
+        // impresora (driver "Zebra CPCL Label Printer" en CUPS). Etiqueta de
+        // 10 cm x 15 cm a 203dpi. Ajusta fuentes/coordenadas si el resultado no
+        // queda bien en la etiqueta física.
+        function generarCpclEtiqueta(tienda, cc) {
+            const dpi = 203;
+            const alturaDots = Math.round((15 / 2.54) * dpi);
+            const anchoDots = Math.round((10 / 2.54) * dpi);
+            const t = escaparTextoEtiqueta(tienda);
+            const c = escaparTextoEtiqueta(cc);
+            return [
+                `! 0 ${dpi} ${dpi} ${alturaDots} 1`,
+                'PAGE-WIDTH ' + anchoDots,
+                'TEXT 4 0 40 100 TIENDA',
+                `TEXT 7 0 40 170 ${t}`,
+                'TEXT 4 0 40 480 CC',
+                `TEXT 7 0 40 550 ${c}`,
+                'FORM',
+                'PRINT'
+            ].join('\r\n') + '\r\n';
         }
 
         async function imprimirEtiquetaPreparador(order) {
-            let url = getPuenteImpresionUrl();
-            if (!url) {
-                configurarPuenteImpresion();
-                url = getPuenteImpresionUrl();
-                if (!url) return;
+            const ip = getImpresoraIp();
+            if (!ip) {
+                configurarImpresora();
+                return;
             }
+            const cpcl = generarCpclEtiqueta(order.tienda, order.cc);
             try {
-                const response = await fetch(url, {
+                await fetch(`http://${ip}/pstprnt`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tienda: order.tienda, cc: order.cc })
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: cpcl
                 });
-                const texto = await response.text();
-                if (!response.ok) throw new Error(texto || `Error ${response.status}`);
-                alert('Etiqueta enviada a la impresora.');
+                alert('Etiqueta enviada a la impresora. Comprueba en la impresora que ha salido (no se puede confirmar desde la web).');
             } catch (error) {
                 console.error(error);
-                alert(`No se pudo enviar la etiqueta al servidor de impresión: ${error.message}\n\nComprueba que el servidor puente esté encendido y que la URL configurada (⚙) sea correcta.`);
+                alert(`No se pudo enviar la etiqueta a la impresora (${ip}): ${error.message}\n\nComprueba la IP configurada (⚙) y que la impresora esté encendida y en red.`);
             }
         }
 
@@ -1507,7 +1543,7 @@
             if (esPreparador) {
                 const buscarEl = document.getElementById('prep-buscar');
                 buscarEl.addEventListener('input', renderPreparadorLista);
-                document.getElementById('prep-config-impresora-btn').addEventListener('click', configurarPuenteImpresion);
+                document.getElementById('prep-config-impresora-btn').addEventListener('click', configurarImpresora);
                 document.getElementById('refresh-orders-btn').addEventListener('click', cargarPedidosSupabase);
                 document.getElementById('logout-btn').addEventListener('click', cerrarSesion);
                 cargarPedidosSupabase();
