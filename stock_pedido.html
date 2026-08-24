@@ -204,7 +204,7 @@
                     <option value="">Seleccione un circuito</option>
                     <option value="Transporte">Transporte</option>
                     <option value="Retirada en Tienda">Retirada en Tienda</option>
-                    <option value="Retirada en Centro Logistico">Retirada en LLS Palma</option>
+                    <option value="Retirada en LLS Palma">Retirada en LLS Palma</option>
                 </select>
             </div>
         </div>
@@ -521,6 +521,7 @@
                 lineas,
                 impreso: toBool(pick(row, ['impreso', 'Impreso'], false)),
                 preparado: toBool(pick(row, ['preparado', 'Preparado'], false)),
+                estadoPreparacion: toText(pick(row, ['EstadoPreparacion', 'estadoPreparacion', 'estado_preparacion'], '')).toLowerCase(),
                 _raw: row
             };
         }
@@ -696,9 +697,18 @@
             return normalizeTiendaCode(a) === normalizeTiendaCode(b);
         }
 
+        // Un pedido deja de "reservar" stock cuando ya está finalizado por el
+        // Preparador (preparado o preparado parcial), o cuando lo estaba por el
+        // sistema antiguo (campo "preparado"), para no descontar dos veces algo
+        // que ya se ha completado.
+        function pedidoEstaFinalizado(pedido) {
+            const ep = toText(pedido.estadoPreparacion).toLowerCase();
+            return pedido.preparado || ep === 'preparado' || ep === 'preparado_parcial';
+        }
+
         function calcularReservado(referencia, tienda) {
             return pedidosCache.reduce((total, pedido) => {
-                if (pedido.preparado || !sameTienda(pedido.tienda, tienda)) return total;
+                if (pedidoEstaFinalizado(pedido) || !sameTienda(pedido.tienda, tienda)) return total;
                 return total + pedido.lineas.reduce((subtotal, linea) => {
                     return sameText(linea.referencia, referencia) ? subtotal + toNumber(linea.cantSolicitada) : subtotal;
                 }, 0);
